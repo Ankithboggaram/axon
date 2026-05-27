@@ -22,7 +22,7 @@ pub enum RegistryType {
 }
 
 /// Output type produced by the postprocess stage.
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OutputType {
     Binary,

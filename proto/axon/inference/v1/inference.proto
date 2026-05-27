@@ -13,9 +13,9 @@ service InferenceService {
 // If features is populated, they are used directly.
 // If empty, the feature vector is fetched from Redis by entity_id.
 message PredictRequest {
-  string         entity_id = 1;
-  repeated float features  = 2;
-  map<string, string> metadata = 3;
+  string              entity_id = 1;
+  repeated float      features  = 2;
+  map<string, string> metadata  = 3;
 }
 
 message PredictStreamRequest {
@@ -23,24 +23,27 @@ message PredictStreamRequest {
   map<string, string> metadata    = 2;
 }
 
-// prediction is interpreted based on the postprocess stage config:
-//   binary      → +1.0 or -1.0
-//   probability → 0.0 – 1.0
-//   raw         → model output unchanged
-message PredictResponse {
-  string entity_id    = 1;
-  float  prediction   = 2;
-  float  confidence   = 3;
-  int64  timestamp_ms = 4;
-  map<string, int64> stage_latency_us = 5;
+// A single named output tensor from the model.
+// values holds the flattened tensor data; shape describes how to interpret it.
+message OutputTensor {
+  string         name   = 1;
+  repeated float values = 2;
+  repeated int64 shape  = 3;
 }
 
-// Same shape as PredictResponse for now, but kept separate so the two
-// RPCs can evolve independently.
+// outputs holds one OutputTensor per model output.
+// The caller is responsible for interpreting the tensor shape and values.
+message PredictResponse {
+  string                entity_id        = 1;
+  repeated OutputTensor outputs          = 2;
+  int64                 timestamp_ms     = 3;
+  map<string, int64>    stage_latency_us = 4;
+}
+
+// Same shape as PredictResponse, kept separate so the two RPCs can evolve independently.
 message PredictStreamResponse {
-  string entity_id    = 1;
-  float  prediction   = 2;
-  float  confidence   = 3;
-  int64  timestamp_ms = 4;
-  map<string, int64> stage_latency_us = 5;
+  string                entity_id        = 1;
+  repeated OutputTensor outputs          = 2;
+  int64                 timestamp_ms     = 3;
+  map<string, int64>    stage_latency_us = 4;
 }
