@@ -1,0 +1,46 @@
+// Axon gRPC inference service.
+// Compiled into Rust at build time by build.rs.
+
+syntax = "proto3";
+
+package axon.inference.v1;
+
+service InferenceService {
+  rpc Predict(PredictRequest) returns (PredictResponse);
+  rpc PredictStream(PredictStreamRequest) returns (PredictStreamResponse);
+}
+
+// If features is populated, they are used directly.
+// If empty, the feature vector is fetched from Redis by entity_id.
+message PredictRequest {
+  string         entity_id = 1;
+  repeated float features  = 2;
+  map<string, string> metadata = 3;
+}
+
+message PredictStreamRequest {
+  repeated string     stream_keys = 1;
+  map<string, string> metadata    = 2;
+}
+
+// prediction is interpreted based on the postprocess stage config:
+//   binary      → +1.0 or -1.0
+//   probability → 0.0 – 1.0
+//   raw         → model output unchanged
+message PredictResponse {
+  string entity_id    = 1;
+  float  prediction   = 2;
+  float  confidence   = 3;
+  int64  timestamp_ms = 4;
+  map<string, int64> stage_latency_us = 5;
+}
+
+// Same shape as PredictResponse for now, but kept separate so the two
+// RPCs can evolve independently.
+message PredictStreamResponse {
+  string entity_id    = 1;
+  float  prediction   = 2;
+  float  confidence   = 3;
+  int64  timestamp_ms = 4;
+  map<string, int64> stage_latency_us = 5;
+}

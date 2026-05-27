@@ -1,0 +1,33 @@
+[package]
+name = "axon"
+version = "0.1.0"
+edition = "2024"
+description = "High-performance ML inference serving engine — part of the Cortex platform"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+
+[dependencies]
+
+# --- pipeline ---
+pipex = { path = "../pipex" }
+
+# --- async runtime ---
+tokio = { version = "1", features = ["full"] }
+
+# --- async trait support ---
+async-trait = "0.1"
+
+# --- serialisation ---
+serde = { version = "1", features = ["derive"] }
+toml  = "0.8"
+
+# --- error handling ---
+anyhow    = "1"
+thiserror = "2"
+
+# --- logging ---
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

@@ -1,0 +1,21 @@
+# --- infrastructure ---
+
+[store]
+
+[metrics]
+
+# --- serving ---
+
+[grpc]
+
+[stream]
+
+# --- model ---
+
+[backend]
+
+[registry]
+
+[model_schema]
+
+[pipeline]
