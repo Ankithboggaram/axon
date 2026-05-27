@@ -1,21 +1,64 @@
 # --- infrastructure ---
 
 [store]
+type = "redis"
+host = "localhost"
+port = 6379
 
 [metrics]
+port = 9090
 
 # --- serving ---
 
 [grpc]
+host = "0.0.0.0"
+port = 50051
 
 [stream]
+source      = "binance"
+stream_keys = ["BTCUSDT", "ETHUSDT"]
 
 # --- model ---
 
 [backend]
+type  = "triton"   # "triton" | "onnx_runtime"
+model = "my_model"
+host  = "localhost"
+port  = 8001
 
 [registry]
+type          = "mlflow"
+uri           = "http://localhost:5000"
+model_name    = "my_model"
+model_version = "1"
 
 [model_schema]
 
-[pipeline]
+[[model_schema.inputs]]
+name  = "features"
+dtype = "fp32"   # fp32 | fp16 | int32 | int64 | bool | bytes
+shape = [1, 32]
+
+[[model_schema.outputs]]
+name  = "prediction"
+dtype = "fp32"
+shape = [1, 1]
+
+[[pipeline.stages]]
+type              = "validate"
+expected_features = 32
+min               = -10.0
+max               = 10.0
+
+[[pipeline.stages]]
+type = "normalize"
+mean = 0.5
+std  = 0.1
+
+[[pipeline.stages]]
+type = "infer"
+
+[[pipeline.stages]]
+type        = "postprocess"
+threshold   = 0.7
+output_type = "binary"   # "binary" | "probability" | "raw"
