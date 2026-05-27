@@ -8,5 +8,14 @@ pub mod packaging;
 
 #[async_trait]
 pub trait Backend: std::fmt::Debug + Send + Sync {
-    async fn run(&self, inputs: &[NamedTensorRef<'_>]) -> anyhow::Result<Vec<NamedTensor>>;
+    /// Runs inference and writes output tensors into `outputs`.
+    ///
+    /// The caller must pass the scratchpad's pre-allocated outputs Vec.
+    /// The backend clears it and pushes results in, reusing the existing
+    /// Vec capacity across requests to avoid heap allocation.
+    async fn run(
+        &self,
+        inputs: &[NamedTensorRef<'_>],
+        outputs: &mut Vec<NamedTensor>,
+    ) -> anyhow::Result<()>;
 }

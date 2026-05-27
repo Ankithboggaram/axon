@@ -31,12 +31,14 @@ impl Stage<InferenceScratchpad> for InferStage {
 
         // Backend::run is async. block_in_place parks the current thread so
         // Tokio can schedule other tasks while we block on the network call.
-        let outputs = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async { self.backend.run(&inputs).await })
+        // Passing &mut ctx.outputs lets the backend reuse the Vec's existing
+        // capacity across requests instead of allocating a new one each time.
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(async { self.backend.run(&inputs, &mut ctx.outputs).await })
         })
         .map_err(|e| PipelineError::StageFailed(e.to_string()))?;
 
-        ctx.outputs = outputs;
         Ok(())
     }
 }

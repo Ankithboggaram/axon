@@ -1,0 +1,9 @@
+# Build configuration for Axon.
+
+[build]
+# Compile for the CPU this binary is built on, enabling all available SIMD
+# instructions (AVX2, FMA on x86; NEON/SVE on ARM). Makes ndarray vector
+# operations significantly faster. The binary will not run on a different
+# CPU family — acceptable for a Docker service deployed on known hardware.
+# Remove this flag when building a portable or cross-compiled binary.
+rustflags = ["-C", "target-cpu=native"]

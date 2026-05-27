@@ -12,30 +12,33 @@ use crate::pipeline::InferenceScratchpad;
 /// before this stage to replace NaN values rather than reject them.
 #[derive(Debug)]
 pub struct ValidateStage {
-    pub expected_shape: Vec<i64>,
+    /// Expected shape stored as usize to match ndarray's shape() directly,
+    /// avoiding a cast and a Vec allocation on every request.
+    pub expected_shape: Box<[usize]>,
 }
 
 impl Stage<InferenceScratchpad> for ValidateStage {
     fn run(&mut self, ctx: &mut InferenceScratchpad) -> Result<(), PipelineError> {
-        // Check shape.
-        let actual_shape: Vec<i64> = ctx.input.shape().iter().map(|&d| d as i64).collect();
-        if actual_shape != self.expected_shape {
+        // Direct slice comparison — no allocation, no cast.
+        if ctx.input.shape() != self.expected_shape.as_ref() {
             return Err(PipelineError::StageFailed(format!(
                 "validate: expected shape {:?}, got {:?}",
-                self.expected_shape, actual_shape
+                self.expected_shape,
+                ctx.input.shape(),
             )));
         }
 
-        // Check for NaN and infinite values.
+        // is_finite() is one CPU instruction covering both NaN and infinite.
+        // Only branch into the specific check on the (rare) failure path.
         for &val in ctx.input.iter() {
-            if val.is_nan() {
+            if !val.is_finite() {
                 return Err(PipelineError::StageFailed(
-                    "validate: input contains NaN".into(),
-                ));
-            }
-            if val.is_infinite() {
-                return Err(PipelineError::StageFailed(
-                    "validate: input contains infinite value".into(),
+                    if val.is_nan() {
+                        "validate: input contains NaN"
+                    } else {
+                        "validate: input contains infinite value"
+                    }
+                    .into(),
                 ));
             }
         }

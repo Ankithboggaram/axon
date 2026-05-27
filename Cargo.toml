@@ -6,14 +6,20 @@ description = "High-performance ML inference serving engine — part of the Cort
 
 [profile.release]
 opt-level = 3
-lto = "thin"
+lto = "fat"         # full cross-crate LTO — lets LLVM inline across ndarray, pipex, and axon
 codegen-units = 1
+panic = "abort"     # removes stack unwinding machinery — smaller binary, no unwind overhead
 
 [dependencies]
 
 # --- pipeline ---
-pipex  = { path = "../pipex" }
+pipex   = { path = "../pipex" }
 ndarray = "0.16"
+
+# --- fixed-capacity stack types ---
+# ArrayString<N> replaces String for hot-path fields where max length is known,
+# eliminating heap allocation and reallocation risk entirely.
+arrayvec = "0.7"
 
 # --- async runtime ---
 tokio = { version = "1", features = ["full"] }
