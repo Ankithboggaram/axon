@@ -8,7 +8,8 @@ use crate::pipeline::InferenceScratchpad;
 /// Checks input tensor shape, NaN, and infinite values.
 ///
 /// Fails if the actual shape does not match `expected_shape`, or if any
-/// element is NaN or infinite.
+/// element is NaN or infinite. If an impute stage is present, place it
+/// before this stage to replace NaN values rather than reject them.
 #[derive(Debug)]
 pub struct ValidateStage {
     pub expected_shape: Vec<i64>,
