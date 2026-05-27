@@ -7,6 +7,7 @@ use crate::types::NamedTensor;
 
 pub mod stages;
 
+#[derive(Debug)]
 pub struct InferenceScratchpad {
     pub entity_id: String,
     pub request_id: String,
