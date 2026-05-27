@@ -166,8 +166,55 @@ pub struct Config {
     pub pipeline: PipelineConfig,
 }
 
-pub fn load(path: &str) -> anyhow::Result<Config> {
-    let contents = std::fs::read_to_string(path)?;
-    let config = toml::from_str(&contents)?;
-    Ok(config)
+impl Config {
+    pub fn load(path: &str) -> anyhow::Result<Self> {
+        let contents = std::fs::read_to_string(path)?;
+        let config: Self = toml::from_str(&contents)?;
+        config.validate()?;
+        Ok(config)
+    }
+
+    pub fn validate(&self) -> anyhow::Result<()> {
+        if self.pipeline.stages.is_empty() {
+            anyhow::bail!("pipeline must have at least one stage");
+        }
+
+        if self.stream.stream_keys.is_empty() {
+            anyhow::bail!("stream.stream_keys must not be empty");
+        }
+
+        if self.grpc.port == 0 {
+            anyhow::bail!("grpc.port must not be 0");
+        }
+
+        if self.metrics.port == 0 {
+            anyhow::bail!("metrics.port must not be 0");
+        }
+
+        if self.backend.port == 0 {
+            anyhow::bail!("backend.port must not be 0");
+        }
+
+        if self.store.port == 0 {
+            anyhow::bail!("store.port must not be 0");
+        }
+
+        if self.model_schema.inputs.is_empty() {
+            anyhow::bail!("model_schema must define at least one input tensor");
+        }
+
+        if self.model_schema.outputs.is_empty() {
+            anyhow::bail!("model_schema must define at least one output tensor");
+        }
+
+        for stage in &self.pipeline.stages {
+            if let StageConfig::Normalize { std, .. } = stage
+                && *std == 0.0
+            {
+                anyhow::bail!("normalize stage: std must not be 0 (division by zero)");
+            }
+        }
+
+        Ok(())
+    }
 }
