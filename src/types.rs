@@ -1,10 +1,12 @@
 //! Shared types used across modules.
 
-/// A tensor with a flat data buffer and its shape.
+use ndarray::ArrayD;
+
+/// A named n-dimensional tensor.
 ///
-/// Data is stored in row-major order. The shape describes how to interpret it.
-pub struct Tensor {
+/// Data is stored as a dynamically-shaped f32 array. The name identifies
+/// which model input or output this tensor corresponds to.
+pub struct NamedTensor {
     pub name: String,
-    pub data: Vec<f32>,
-    pub shape: Vec<i64>,
+    pub data: ArrayD<f32>,
 }

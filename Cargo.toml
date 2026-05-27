@@ -12,7 +12,8 @@ codegen-units = 1
 [dependencies]
 
 # --- pipeline ---
-pipex = { path = "../pipex" }
+pipex  = { path = "../pipex" }
+ndarray = "0.16"
 
 # --- async runtime ---
 tokio = { version = "1", features = ["full"] }
