@@ -2,20 +2,21 @@
 
 use async_trait::async_trait;
 
-use crate::types::{NamedTensor, NamedTensorRef};
+use crate::types::{NamedTensorRef, OutputBuffer};
 
 pub mod packaging;
 
 #[async_trait]
 pub trait Backend: std::fmt::Debug + Send + Sync {
-    /// Runs inference and writes output tensors into `outputs`.
+    /// Runs inference and writes results into the scratchpad's pre-allocated output buffers.
     ///
-    /// The caller must pass the scratchpad's pre-allocated outputs Vec.
-    /// The backend clears it and pushes results in, reusing the existing
-    /// Vec capacity across requests to avoid heap allocation.
+    /// The backend must call `assign()` on each `OutputBuffer::data` rather than
+    /// replacing it, so that the pre-allocated memory is reused across requests.
+    /// The number of outputs is fixed by model_schema at startup and must match
+    /// the length of the `outputs` slice.
     async fn run(
         &self,
         inputs: &[NamedTensorRef<'_>],
-        outputs: &mut Vec<NamedTensor>,
+        outputs: &mut [OutputBuffer],
     ) -> anyhow::Result<()>;
 }

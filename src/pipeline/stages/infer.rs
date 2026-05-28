@@ -11,8 +11,8 @@ use crate::types::NamedTensorRef;
 
 /// Packages the input tensor and runs it through the configured backend.
 ///
-/// Writes the backend's output tensors into ctx.outputs for the
-/// postprocess stage to consume.
+/// Passes the scratchpad's pre-allocated output buffers directly to the
+/// backend, which writes into them in place — zero allocation on the hot path.
 #[derive(Debug)]
 pub struct InferStage {
     /// Shared reference to the inference backend (Triton or ONNX Runtime).
@@ -31,8 +31,8 @@ impl Stage<InferenceScratchpad> for InferStage {
 
         // Backend::run is async. block_in_place parks the current thread so
         // Tokio can schedule other tasks while we block on the network call.
-        // Passing &mut ctx.outputs lets the backend reuse the Vec's existing
-        // capacity across requests instead of allocating a new one each time.
+        // The backend writes directly into ctx.outputs (pre-allocated buffers),
+        // so no allocation occurs on this path.
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current()
                 .block_on(async { self.backend.run(&inputs, &mut ctx.outputs).await })

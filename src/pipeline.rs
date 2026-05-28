@@ -4,7 +4,7 @@ use arrayvec::ArrayString;
 use ndarray::ArrayD;
 use pipex::scratchpad::Scratchpad;
 
-use crate::types::NamedTensor;
+use crate::types::OutputBuffer;
 
 pub mod stages;
 
@@ -21,11 +21,11 @@ pub struct InferenceScratchpad {
     /// Request identifier — stack-allocated, never heap-allocates.
     pub request_id: ArrayString<MAX_ID_LEN>,
     pub timestamp_ms: i64,
-    /// Input tensor — shape is determined by the model schema at runtime.
+    /// Input tensor — pre-allocated at startup to the shape from model_schema.inputs.
     pub input: ArrayD<f32>,
-    /// Output tensors populated by the infer stage.
-    /// Capacity is preserved across requests — see reset().
-    pub outputs: Vec<NamedTensor>,
+    /// Output buffers — pre-allocated at startup, one per model_schema.outputs entry.
+    /// The backend writes into these in place each request via assign().
+    pub outputs: Box<[OutputBuffer]>,
 }
 
 impl Scratchpad for InferenceScratchpad {
@@ -37,9 +37,10 @@ impl Scratchpad for InferenceScratchpad {
         // overwrite all elements before the pipeline runs, so this is a
         // protective measure against stale data leaking across requests.
         self.input.fill(0.0);
-        // Drops contained NamedTensors but preserves Vec capacity so the
-        // backend can push into the same allocation on the next request.
-        self.outputs.clear();
+        // Zero each pre-allocated output buffer. Shape and allocation are preserved.
+        for out in self.outputs.iter_mut() {
+            out.data.fill(0.0);
+        }
     }
 
     fn validate(&self) -> bool {
