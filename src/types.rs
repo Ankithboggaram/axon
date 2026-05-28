@@ -36,6 +36,6 @@ pub struct NamedTensorRef<'a> {
 pub struct OutputBuffer {
     /// Name of this output tensor, set once at startup.
     pub name: ArrayString<MAX_TENSOR_NAME_LEN>,
-    /// Pre-allocated data buffer — written in place by the backend each request.
+    /// Pre-allocated data buffer, written in place by the backend each request.
     pub data: ArrayD<f32>,
 }

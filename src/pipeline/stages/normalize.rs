@@ -9,7 +9,7 @@ use crate::pipeline::InferenceScratchpad;
 ///
 /// Each element is transformed as `(x - mean) * inv_std`. Stores the
 /// reciprocal of std rather than std itself so the hot path multiplies
-/// instead of divides — division is 10-30x slower than multiplication
+/// instead of divides; division is 10-30x slower than multiplication
 /// on modern CPUs. The wiring code computes `1.0 / std` once at startup.
 #[derive(Debug)]
 pub struct NormalizeStage {

@@ -8,9 +8,9 @@ use crate::pipeline::InferenceScratchpad;
 
 /// Transforms the first output tensor based on the configured output type.
 ///
-/// - `Binary` — thresholds the score to 1.0 or 0.0
-/// - `Probability` — passes the raw score through unchanged
-/// - `Raw` — passes the raw model output through unchanged
+/// - `Binary`: thresholds the score to 1.0 or 0.0
+/// - `Probability`: passes the raw score through unchanged
+/// - `Raw`: passes the raw model output through unchanged
 #[derive(Debug)]
 pub struct PostprocessStage {
     pub threshold: f32,

@@ -1,1 +1,1 @@
-//! gRPC server — unary and streaming RPC handlers.
+//! gRPC server: unary and streaming RPC handlers.

@@ -16,14 +16,14 @@ pub const MAX_ID_LEN: usize = 128;
 
 #[derive(Debug)]
 pub struct InferenceScratchpad {
-    /// Entity identifier — stack-allocated, never heap-allocates.
+    /// Entity identifier, stack-allocated to avoid heap allocation on the hot path.
     pub entity_id: ArrayString<MAX_ID_LEN>,
-    /// Request identifier — stack-allocated, never heap-allocates.
+    /// Request identifier, stack-allocated to avoid heap allocation on the hot path.
     pub request_id: ArrayString<MAX_ID_LEN>,
     pub timestamp_ms: i64,
-    /// Input tensor — pre-allocated at startup to the shape from model_schema.inputs.
+    /// Input tensor, pre-allocated at startup to the shape from model_schema.inputs.
     pub input: ArrayD<f32>,
-    /// Output buffers — pre-allocated at startup, one per model_schema.outputs entry.
+    /// Output buffers, pre-allocated at startup, one per model_schema.outputs entry.
     /// The backend writes into these in place each request via assign().
     pub outputs: Box<[OutputBuffer]>,
 }
@@ -33,11 +33,10 @@ impl Scratchpad for InferenceScratchpad {
         self.entity_id.clear();
         self.request_id.clear();
         self.timestamp_ms = 0;
-        // Zeroes the input buffer without deallocating. The server layer will
-        // overwrite all elements before the pipeline runs, so this is a
-        // protective measure against stale data leaking across requests.
+        // Protective zero: prevents stale data leaking if the server writes
+        // fewer features than expected.
         self.input.fill(0.0);
-        // Zero each pre-allocated output buffer. Shape and allocation are preserved.
+        // Reuses pre-allocated buffers: only data is reset, not the allocation.
         for out in self.outputs.iter_mut() {
             out.data.fill(0.0);
         }

@@ -19,7 +19,6 @@ pub struct ValidateStage {
 
 impl Stage<InferenceScratchpad> for ValidateStage {
     fn run(&mut self, ctx: &mut InferenceScratchpad) -> Result<(), PipelineError> {
-        // Direct slice comparison — no allocation, no cast.
         if ctx.input.shape() != self.expected_shape.as_ref() {
             return Err(PipelineError::StageFailed(format!(
                 "validate: expected shape {:?}, got {:?}",
