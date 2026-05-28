@@ -6,6 +6,7 @@ use pipex::scratchpad::Scratchpad;
 
 use crate::types::OutputBuffer;
 
+pub mod build;
 pub mod stages;
 
 /// Maximum byte length for entity_id and request_id.
