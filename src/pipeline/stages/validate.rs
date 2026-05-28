@@ -17,7 +17,20 @@ pub struct ValidateStage {
     pub expected_shape: Box<[usize]>,
 }
 
+// Separated from run() so #[cold] applies to the entire error-construction path,
+// giving the branch predictor a stronger hint that the hot path never branches here.
+#[cold]
+fn non_finite_err(val: f32) -> PipelineError {
+    let msg = if val.is_nan() {
+        "validate: input contains NaN"
+    } else {
+        "validate: input contains infinite value"
+    };
+    PipelineError::StageFailed(msg.into())
+}
+
 impl Stage<InferenceScratchpad> for ValidateStage {
+    #[inline]
     fn run(&mut self, ctx: &mut InferenceScratchpad) -> Result<(), PipelineError> {
         if ctx.input.shape() != self.expected_shape.as_ref() {
             return Err(PipelineError::StageFailed(format!(
@@ -31,12 +44,7 @@ impl Stage<InferenceScratchpad> for ValidateStage {
         // Only branch into the specific check on the (rare) failure path.
         for &val in ctx.input.iter() {
             if !val.is_finite() {
-                let msg = if val.is_nan() {
-                    "validate: input contains NaN"
-                } else {
-                    "validate: input contains infinite value"
-                };
-                return Err(PipelineError::StageFailed(msg.into()));
+                return Err(non_finite_err(val));
             }
         }
 

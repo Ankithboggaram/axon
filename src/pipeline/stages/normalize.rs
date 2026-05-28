@@ -19,6 +19,7 @@ pub struct NormalizeStage {
 }
 
 impl Stage<InferenceScratchpad> for NormalizeStage {
+    #[inline]
     fn run(&mut self, ctx: &mut InferenceScratchpad) -> Result<(), PipelineError> {
         ctx.input -= self.mean;
         ctx.input *= self.inv_std;

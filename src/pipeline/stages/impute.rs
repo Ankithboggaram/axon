@@ -15,6 +15,7 @@ pub struct ImputeStage {
 }
 
 impl Stage<InferenceScratchpad> for ImputeStage {
+    #[inline]
     fn run(&mut self, ctx: &mut InferenceScratchpad) -> Result<(), PipelineError> {
         ctx.input
             .mapv_inplace(|v| if v.is_nan() { self.default_value } else { v });

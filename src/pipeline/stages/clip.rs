@@ -16,6 +16,7 @@ pub struct ClipStage {
 }
 
 impl Stage<InferenceScratchpad> for ClipStage {
+    #[inline]
     fn run(&mut self, ctx: &mut InferenceScratchpad) -> Result<(), PipelineError> {
         ctx.input.mapv_inplace(|v| v.clamp(self.min, self.max));
         Ok(())

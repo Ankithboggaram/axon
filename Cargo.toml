@@ -2,7 +2,7 @@
 name = "axon"
 version = "0.1.0"
 edition = "2024"
-description = "High-performance ML inference serving engine — part of the Cortex platform"
+description = "High-performance ML inference serving engine, part of the Cortex platform"
 
 [profile.release]
 opt-level = 3
@@ -22,7 +22,7 @@ ndarray = "0.16"
 arrayvec = "0.7"
 
 # --- async runtime ---
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 # --- async trait support ---
 async-trait = "0.1"

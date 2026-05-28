@@ -18,6 +18,7 @@ pub struct PostprocessStage {
 }
 
 impl Stage<InferenceScratchpad> for PostprocessStage {
+    #[inline]
     fn run(&mut self, ctx: &mut InferenceScratchpad) -> Result<(), PipelineError> {
         if ctx.outputs.is_empty() {
             return Err(PipelineError::StageFailed(

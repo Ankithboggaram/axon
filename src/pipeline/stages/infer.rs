@@ -2,12 +2,13 @@
 
 use std::sync::Arc;
 
+use arrayvec::ArrayString;
 use pipex::error::PipelineError;
 use pipex::stage::Stage;
 
 use crate::backend::Backend;
 use crate::pipeline::InferenceScratchpad;
-use crate::types::NamedTensorRef;
+use crate::types::{MAX_TENSOR_NAME_LEN, NamedTensorRef};
 
 /// Packages the input tensor and runs it through the configured backend.
 ///
@@ -18,10 +19,11 @@ pub struct InferStage {
     /// Shared reference to the inference backend (Triton or ONNX Runtime).
     pub backend: Arc<dyn Backend>,
     /// Name of the input tensor as defined in model_schema.inputs.
-    pub input_name: String,
+    pub input_name: ArrayString<MAX_TENSOR_NAME_LEN>,
 }
 
 impl Stage<InferenceScratchpad> for InferStage {
+    #[inline]
     fn run(&mut self, ctx: &mut InferenceScratchpad) -> Result<(), PipelineError> {
         let inputs = [NamedTensorRef {
             name: &self.input_name,
