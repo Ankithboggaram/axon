@@ -32,14 +32,12 @@ impl Stage<InferenceScratchpad> for ValidateStage {
         // Only branch into the specific check on the (rare) failure path.
         for &val in ctx.input.iter() {
             if !val.is_finite() {
-                return Err(PipelineError::StageFailed(
-                    if val.is_nan() {
-                        "validate: input contains NaN"
-                    } else {
-                        "validate: input contains infinite value"
-                    }
-                    .into(),
-                ));
+                let msg = if val.is_nan() {
+                    "validate: input contains NaN"
+                } else {
+                    "validate: input contains infinite value"
+                };
+                return Err(PipelineError::StageFailed(msg.into()));
             }
         }
 

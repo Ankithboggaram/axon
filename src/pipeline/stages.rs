@@ -1,4 +1,4 @@
-//! Built-in pipeline stages: validate, normalize, infer, postprocess.
+//! Built-in pipeline stages: clip, impute, infer, normalize, postprocess, validate.
 
 pub mod clip;
 pub mod impute;
