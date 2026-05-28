@@ -14,7 +14,10 @@ panic = "abort"     # removes stack unwinding machinery — smaller binary, no u
 
 # --- pipeline ---
 pipex   = { path = "../pipex" }
-ndarray = "0.16"
+ndarray = "0.17"
+
+# --- inference backend ---
+ort = { version = "2.0.0-rc.12", features = ["download-binaries", "ndarray"] }
 
 # --- fixed-capacity stack types ---
 # ArrayString<N> replaces String for hot-path fields where max length is known,
