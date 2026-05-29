@@ -7,7 +7,6 @@ pub mod pipeline;
 pub mod registry;
 pub mod server;
 pub mod store;
-pub mod stream;
 pub mod types;
 
 // Your right is to work only and never to the fruit thereof. Do not consider

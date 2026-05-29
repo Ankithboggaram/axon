@@ -5,8 +5,10 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BackendType {
-    Triton,
+    /// In-process ONNX Runtime backend. Model path is resolved from the registry at startup.
     OnnxRuntime,
+    /// NVIDIA Triton Inference Server backend. Not yet implemented.
+    Triton,
 }
 
 #[derive(Debug, Deserialize)]
@@ -37,18 +39,15 @@ pub struct GrpcConfig {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct StreamConfig {
-    pub source: String,
-    pub stream_keys: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct BackendConfig {
     #[serde(rename = "type")]
     pub backend_type: BackendType,
-    pub model: String,
-    pub host: String,
-    pub port: u16,
+    /// Model name registered in Triton. Required for the Triton backend only.
+    pub model: Option<String>,
+    /// Triton server host. Required for the Triton backend only.
+    pub host: Option<String>,
+    /// Triton server port. Required for the Triton backend only.
+    pub port: Option<u16>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -151,7 +150,6 @@ pub struct PipelineConfig {
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub grpc: GrpcConfig,
-    pub stream: StreamConfig,
     pub backend: BackendConfig,
     pub registry: RegistryConfig,
     pub store: StoreConfig,
@@ -173,10 +171,6 @@ impl Config {
             anyhow::bail!("pipeline must have at least one stage");
         }
 
-        if self.stream.stream_keys.is_empty() {
-            anyhow::bail!("stream.stream_keys must not be empty");
-        }
-
         if self.grpc.port == 0 {
             anyhow::bail!("grpc.port must not be 0");
         }
@@ -185,8 +179,11 @@ impl Config {
             anyhow::bail!("metrics.port must not be 0");
         }
 
-        if self.backend.port == 0 {
-            anyhow::bail!("backend.port must not be 0");
+        match self.backend.backend_type {
+            BackendType::Triton => {
+                anyhow::bail!("Triton backend is not yet implemented; use onnx_runtime");
+            }
+            BackendType::OnnxRuntime => {}
         }
 
         if self.store.port == 0 {
@@ -195,6 +192,13 @@ impl Config {
 
         if self.model_schema.inputs.is_empty() {
             anyhow::bail!("model_schema must define at least one input tensor");
+        }
+
+        if self.model_schema.inputs.len() > 1 {
+            anyhow::bail!(
+                "model_schema defines {} input tensors; only one input is supported in Phase 1",
+                self.model_schema.inputs.len()
+            );
         }
 
         if self.model_schema.outputs.is_empty() {
