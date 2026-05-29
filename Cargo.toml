@@ -30,6 +30,9 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 # --- async trait support ---
 async-trait = "0.1"
 
+# --- http client ---
+reqwest = { version = "0.12", features = ["json"] }
+
 # --- serialisation ---
 serde = { version = "1", features = ["derive"] }
 toml  = "0.8"
