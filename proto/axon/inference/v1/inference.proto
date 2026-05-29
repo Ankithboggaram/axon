@@ -6,11 +6,14 @@ syntax = "proto3";
 package axon.inference.v1;
 
 service InferenceService {
+  // Single prediction for a given entity.
   rpc Predict(PredictRequest) returns (PredictResponse);
-  rpc PredictStream(PredictStreamRequest) returns (PredictStreamResponse);
+
+  // Continuous predictions for a given entity, streamed back as features update in Redis.
+  rpc PredictStream(PredictStreamRequest) returns (stream PredictStreamResponse);
 }
 
-// If features is populated, they are used directly.
+// If features is populated, they are used directly without a Redis lookup.
 // If empty, the feature vector is fetched from Redis by entity_id.
 message PredictRequest {
   string              entity_id = 1;
@@ -18,9 +21,10 @@ message PredictRequest {
   map<string, string> metadata  = 3;
 }
 
+// Subscribes to continuous predictions for a single entity.
 message PredictStreamRequest {
-  repeated string     stream_keys = 1;
-  map<string, string> metadata    = 2;
+  string              entity_id = 1;
+  map<string, string> metadata  = 2;
 }
 
 // A single named output tensor from the model.
@@ -31,19 +35,15 @@ message OutputTensor {
   repeated int64 shape  = 3;
 }
 
-// outputs holds one OutputTensor per model output.
-// The caller is responsible for interpreting the tensor shape and values.
 message PredictResponse {
-  string                entity_id        = 1;
-  repeated OutputTensor outputs          = 2;
-  int64                 timestamp_ms     = 3;
-  map<string, int64>    stage_latency_us = 4;
+  string                entity_id    = 1;
+  repeated OutputTensor outputs      = 2;
+  int64                 timestamp_ms = 3;
 }
 
 // Same shape as PredictResponse, kept separate so the two RPCs can evolve independently.
 message PredictStreamResponse {
-  string                entity_id        = 1;
-  repeated OutputTensor outputs          = 2;
-  int64                 timestamp_ms     = 3;
-  map<string, int64>    stage_latency_us = 4;
+  string                entity_id    = 1;
+  repeated OutputTensor outputs      = 2;
+  int64                 timestamp_ms = 3;
 }

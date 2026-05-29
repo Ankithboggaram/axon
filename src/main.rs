@@ -2,6 +2,9 @@
 
 pub mod backend;
 pub mod config;
+pub mod proto {
+    tonic::include_proto!("axon.inference.v1");
+}
 pub mod metrics;
 pub mod pipeline;
 pub mod registry;
