@@ -3,9 +3,12 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use futures_util::StreamExt as _;
+
 use async_trait::async_trait;
 use serde::Deserialize;
 
+use crate::config::{ModelSchemaConfig, TensorSpec};
 use crate::registry::{ConfigSeed, ModelRegistryClient, RegisteredModel};
 
 pub struct MlflowClient {
@@ -23,49 +26,7 @@ impl MlflowClient {
             http,
         })
     }
-}
 
-impl std::fmt::Debug for MlflowClient {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MlflowClient")
-            .field("tracking_uri", &self.tracking_uri)
-            .finish_non_exhaustive()
-    }
-}
-
-#[async_trait]
-impl ModelRegistryClient for MlflowClient {
-    async fn fetch_model(&self, name: &str, version: &str) -> anyhow::Result<RegisteredModel> {
-        let resolved = self.resolve_version(name, version).await?;
-        let version_data = self.get_model_version(name, &resolved).await?;
-        let local_path = self.download_artifact(name, &resolved).await?;
-
-        Ok(RegisteredModel {
-            name: version_data.name,
-            version: version_data.version,
-            local_path: local_path.to_string_lossy().into_owned(),
-        })
-    }
-
-    async fn fetch_config_seed(&self, name: &str, version: &str) -> anyhow::Result<ConfigSeed> {
-        let resolved = self.resolve_version(name, version).await?;
-        let version_data = self.get_model_version(name, &resolved).await?;
-        let params = self.get_run_params(&version_data.run_id).await?;
-
-        Ok(ConfigSeed {
-            // Parsing the MLmodel signature requires downloading and parsing a YAML file;
-            // left as None for now so the user fills it in manually.
-            model_schema: None,
-            mean: params.get("mean").and_then(|v| v.parse().ok()),
-            std: params.get("std").and_then(|v| v.parse().ok()),
-            clip_min: params.get("clip_min").and_then(|v| v.parse().ok()),
-            clip_max: params.get("clip_max").and_then(|v| v.parse().ok()),
-            threshold: params.get("threshold").and_then(|v| v.parse().ok()),
-        })
-    }
-}
-
-impl MlflowClient {
     /// Resolves "latest" to a concrete version number; passes through anything else unchanged.
     async fn resolve_version(&self, name: &str, version: &str) -> anyhow::Result<String> {
         if version != "latest" {
@@ -97,32 +58,6 @@ impl MlflowClient {
             .ok_or_else(|| anyhow::anyhow!("no versions found for model '{name}'"))
     }
 
-    async fn get_model_version(
-        &self,
-        name: &str,
-        version: &str,
-    ) -> anyhow::Result<ModelVersionData> {
-        let resp = self
-            .http
-            .get(format!(
-                "{}/api/2.0/mlflow/model-versions/get",
-                self.tracking_uri
-            ))
-            .query(&[("name", name), ("version", version)])
-            .send()
-            .await
-            .map_err(|e| anyhow::anyhow!("failed to fetch model version: {e}"))?;
-
-        check_status(&resp, "model version")?;
-
-        let data: ModelVersionResponse = resp
-            .json()
-            .await
-            .map_err(|e| anyhow::anyhow!("failed to parse model version response: {e}"))?;
-
-        Ok(data.model_version)
-    }
-
     async fn get_run_params(&self, run_id: &str) -> anyhow::Result<HashMap<String, String>> {
         let resp = self
             .http
@@ -139,44 +74,118 @@ impl MlflowClient {
             .await
             .map_err(|e| anyhow::anyhow!("failed to parse run response: {e}"))?;
 
-        let params = data
+        Ok(data
             .run
             .data
             .params
             .unwrap_or_default()
             .into_iter()
             .map(|p| (p.key, p.value))
-            .collect();
+            .collect())
+    }
 
-        Ok(params)
+    /// Downloads the MLmodel metadata file and returns its text.
+    async fn download_mlmodel(&self, name: &str, version: &str) -> anyhow::Result<String> {
+        self.get_artifact(name, version, "MLmodel")
+            .await?
+            .text()
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to read MLmodel response: {e}"))
     }
 
     /// Downloads the ONNX artifact to a local temp directory and returns the path.
+    ///
+    /// Streams directly to disk to avoid buffering the entire model in memory.
     async fn download_artifact(&self, name: &str, version: &str) -> anyhow::Result<PathBuf> {
-        let resp = self
-            .http
-            .get(format!("{}/model-versions/get-artifact", self.tracking_uri))
-            .query(&[("name", name), ("version", version), ("path", "model.onnx")])
-            .send()
-            .await
-            .map_err(|e| anyhow::anyhow!("failed to download artifact: {e}"))?;
-
-        check_status(&resp, "artifact download")?;
-
-        let bytes = resp
-            .bytes()
-            .await
-            .map_err(|e| anyhow::anyhow!("failed to read artifact bytes: {e}"))?;
-
         let dir = std::env::temp_dir().join("axon");
         std::fs::create_dir_all(&dir)
             .map_err(|e| anyhow::anyhow!("failed to create temp dir: {e}"))?;
 
         let path = dir.join(format!("{name}_v{version}.onnx"));
-        std::fs::write(&path, bytes)
-            .map_err(|e| anyhow::anyhow!("failed to write artifact to disk: {e}"))?;
+        let mut file = std::fs::File::create(&path)
+            .map_err(|e| anyhow::anyhow!("failed to create artifact file: {e}"))?;
+
+        let mut stream = self
+            .get_artifact(name, version, "model.onnx")
+            .await?
+            .bytes_stream();
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| anyhow::anyhow!("artifact stream error: {e}"))?;
+            std::io::Write::write_all(&mut file, &chunk)
+                .map_err(|e| anyhow::anyhow!("failed to write artifact chunk: {e}"))?;
+        }
 
         Ok(path)
+    }
+
+    /// Sends a GET request for an artifact file and returns the response on success.
+    async fn get_artifact(
+        &self,
+        name: &str,
+        version: &str,
+        path: &str,
+    ) -> anyhow::Result<reqwest::Response> {
+        let resp = self
+            .http
+            .get(format!("{}/model-versions/get-artifact", self.tracking_uri))
+            .query(&[("name", name), ("version", version), ("path", path)])
+            .send()
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to request artifact '{path}': {e}"))?;
+
+        check_status(&resp, path)?;
+
+        Ok(resp)
+    }
+}
+
+impl std::fmt::Debug for MlflowClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MlflowClient")
+            .field("tracking_uri", &self.tracking_uri)
+            .finish_non_exhaustive()
+    }
+}
+
+#[async_trait]
+impl ModelRegistryClient for MlflowClient {
+    async fn fetch_model(&self, name: &str, version: &str) -> anyhow::Result<RegisteredModel> {
+        let resolved = self.resolve_version(name, version).await?;
+        let local_path = self.download_artifact(name, &resolved).await?;
+
+        Ok(RegisteredModel {
+            name: name.to_owned(),
+            version: resolved,
+            local_path: local_path.to_string_lossy().into_owned(),
+        })
+    }
+
+    async fn fetch_config_seed(&self, name: &str, version: &str) -> anyhow::Result<ConfigSeed> {
+        let resolved = self.resolve_version(name, version).await?;
+        let mlmodel_text = self.download_mlmodel(name, &resolved).await?;
+
+        // Parse once — MLmodel contains both the signature and the run_id.
+        let mlmodel: MlModelFile = serde_yml::from_str(&mlmodel_text)
+            .map_err(|e| anyhow::anyhow!("failed to parse MLmodel YAML: {e}"))?;
+
+        let run_id = mlmodel.run_id.ok_or_else(|| {
+            anyhow::anyhow!(
+                "model '{name}' v{resolved} has no associated training run; \
+                 params and schema cannot be seeded automatically"
+            )
+        })?;
+
+        let params = self.get_run_params(&run_id).await?;
+
+        Ok(ConfigSeed {
+            model_schema: Some(parse_model_schema(mlmodel.signature)?),
+            mean: params.get("mean").and_then(|v| v.parse().ok()),
+            std: params.get("std").and_then(|v| v.parse().ok()),
+            clip_min: params.get("clip_min").and_then(|v| v.parse().ok()),
+            clip_max: params.get("clip_max").and_then(|v| v.parse().ok()),
+            threshold: params.get("threshold").and_then(|v| v.parse().ok()),
+        })
     }
 }
 
@@ -189,19 +198,51 @@ fn check_status(resp: &reqwest::Response, context: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Parses a `ModelSchemaConfig` from the signature block of a parsed MLmodel file.
+///
+/// Fails if the signature block is absent, or if any tensor in the signature
+/// is not a tensor type (e.g. a column/tabular type), since axon only supports tensors.
+fn parse_model_schema(signature: Option<MlModelSignature>) -> anyhow::Result<ModelSchemaConfig> {
+    let sig = signature.ok_or_else(|| {
+        anyhow::anyhow!(
+            "MLmodel has no signature block; log the model with mlflow.models.infer_signature()"
+        )
+    })?;
+
+    let raw_inputs: Vec<MlTensorEntry> = serde_json::from_str(&sig.inputs)
+        .map_err(|e| anyhow::anyhow!("failed to parse MLmodel signature inputs: {e}"))?;
+    let raw_outputs: Vec<MlTensorEntry> = serde_json::from_str(&sig.outputs)
+        .map_err(|e| anyhow::anyhow!("failed to parse MLmodel signature outputs: {e}"))?;
+
+    let convert = |entry: MlTensorEntry| -> anyhow::Result<TensorSpec> {
+        let spec = entry.tensor_spec.ok_or_else(|| {
+            anyhow::anyhow!(
+                "MLmodel signature field '{}' has type '{}', not 'tensor'; \
+                 axon only supports tensor inputs and outputs",
+                entry.name,
+                entry.field_type,
+            )
+        })?;
+        Ok(TensorSpec {
+            name: entry.name,
+            dtype: spec.dtype,
+            shape: spec.shape,
+        })
+    };
+
+    Ok(ModelSchemaConfig {
+        inputs: raw_inputs
+            .into_iter()
+            .map(convert)
+            .collect::<anyhow::Result<_>>()?,
+        outputs: raw_outputs
+            .into_iter()
+            .map(convert)
+            .collect::<anyhow::Result<_>>()?,
+    })
+}
+
 // MLflow REST API response types.
-
-#[derive(Deserialize)]
-struct ModelVersionResponse {
-    model_version: ModelVersionData,
-}
-
-#[derive(Deserialize)]
-struct ModelVersionData {
-    name: String,
-    version: String,
-    run_id: String,
-}
 
 #[derive(Deserialize)]
 struct LatestVersionsResponse {
@@ -232,4 +273,33 @@ struct RunDataInner {
 struct Param {
     key: String,
     value: String,
+}
+
+// MLmodel YAML types.
+
+#[derive(Deserialize)]
+struct MlModelFile {
+    run_id: Option<String>,
+    signature: Option<MlModelSignature>,
+}
+
+#[derive(Deserialize)]
+struct MlModelSignature {
+    inputs: String,
+    outputs: String,
+}
+
+#[derive(Deserialize)]
+struct MlTensorEntry {
+    name: String,
+    #[serde(rename = "type")]
+    field_type: String,
+    #[serde(rename = "tensor-spec")]
+    tensor_spec: Option<MlTensorSpec>,
+}
+
+#[derive(Deserialize)]
+struct MlTensorSpec {
+    dtype: String,
+    shape: Vec<i64>,
 }
