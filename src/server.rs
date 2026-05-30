@@ -119,9 +119,9 @@ impl InferenceServer {
             }
             scratchpad
                 .input
-                .iter_mut()
-                .zip(inline_features)
-                .for_each(|(d, s)| *d = *s);
+                .as_slice_mut()
+                .expect("contiguous array")
+                .copy_from_slice(inline_features);
         }
 
         pipeline.run(scratchpad).map_err(|e| {

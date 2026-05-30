@@ -53,7 +53,12 @@ impl MlflowClient {
 
         data.model_versions
             .into_iter()
-            .max_by_key(|v| v.version.parse::<u64>().unwrap_or(0))
+            .max_by_key(|v| {
+                v.version.parse::<u64>().unwrap_or_else(|_| {
+                    tracing::warn!(version = %v.version, "non-numeric MLflow version treated as 0");
+                    0
+                })
+            })
             .map(|v| v.version)
             .ok_or_else(|| anyhow::anyhow!("no versions found for model '{name}'"))
     }

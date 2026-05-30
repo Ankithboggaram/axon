@@ -192,6 +192,10 @@ impl Config {
             BackendType::OnnxRuntime => {}
         }
 
+        if self.store.host.is_empty() {
+            anyhow::bail!("store.host must not be empty");
+        }
+
         if self.store.port == 0 {
             anyhow::bail!("store.port must not be 0");
         }

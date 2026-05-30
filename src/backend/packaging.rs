@@ -45,12 +45,13 @@ fn write_tensor_block(
 ) {
     writeln!(out, "\n{field} [").unwrap();
     for (i, (tensor, dtype)) in tensors.iter().zip(dtypes).enumerate() {
-        let dims = tensor
-            .shape
-            .iter()
-            .map(|d| d.to_string())
-            .collect::<Vec<_>>()
-            .join(", ");
+        let mut dims = String::new();
+        for (i, d) in tensor.shape.iter().enumerate() {
+            if i > 0 {
+                dims.push_str(", ");
+            }
+            dims.push_str(&d.to_string());
+        }
         writeln!(out, "  {{").unwrap();
         writeln!(out, "    name: \"{}\"", tensor.name).unwrap();
         writeln!(out, "    data_type: {dtype}").unwrap();

@@ -77,9 +77,9 @@ impl FeatureStore for RedisStore {
             );
         }
 
-        dest.iter_mut()
-            .zip(values.iter())
-            .for_each(|(d, s)| *d = *s);
+        dest.as_slice_mut()
+            .expect("contiguous array")
+            .copy_from_slice(&values);
 
         Ok(FetchResult::Hit)
     }
