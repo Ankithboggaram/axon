@@ -6,9 +6,9 @@ description = "High-performance ML inference serving engine, part of the Cortex 
 
 [profile.release]
 opt-level = 3
-lto = "fat"         # full cross-crate LTO — lets LLVM inline across ndarray, pipex, and axon
+lto = "fat"         # full cross-crate LTO, lets LLVM inline across ndarray, pipex, and axon
 codegen-units = 1
-panic = "abort"     # removes stack unwinding machinery — smaller binary, no unwind overhead
+panic = "abort"     # removes stack unwinding machinery; smaller binary, no unwind overhead
 
 [dependencies]
 
