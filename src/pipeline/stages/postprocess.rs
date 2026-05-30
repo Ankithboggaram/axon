@@ -8,7 +8,7 @@ use crate::pipeline::InferenceScratchpad;
 
 /// Transforms the first output tensor based on the configured output type.
 ///
-/// - `Binary`: thresholds the score to 1.0 or 0.0
+/// - `Binary`: thresholds the score to 1.0 or -1.0
 /// - `Probability`: passes the raw score through unchanged
 /// - `Raw`: passes the raw model output through unchanged
 #[derive(Debug)]
@@ -39,7 +39,7 @@ impl Stage<InferenceScratchpad> for PostprocessStage {
                 }
                 output
                     .data
-                    .mapv_inplace(|v| if v > self.threshold { 1.0 } else { 0.0 });
+                    .mapv_inplace(|v| if v > self.threshold { 1.0 } else { -1.0 });
             }
             OutputType::Probability | OutputType::Raw => {
                 // Pass through unchanged - caller is responsible for interpreting the tensor.
