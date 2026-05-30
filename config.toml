@@ -87,7 +87,7 @@ instrumented = true
 
 # Turns the raw model output into a prediction.
 # "binary"      - threshold it, get back 1.0 or -1.0
-# "probability" - threshold it, get back the probability score
+# "probability" - pass the raw probability score through unchanged
 # "raw"         - pass the output tensor through unchanged
 [[pipeline.stages]]
 type        = "postprocess"

@@ -30,7 +30,8 @@ impl Stage<InferenceScratchpad> for InferStage {
             data: ctx.input.view(),
         }];
 
-        // block_in_place lets Tokio schedule other tasks while this thread blocks on the network call.
+        // block_in_place bridges the sync Stage trait with the async Backend trait.
+        // It tells Tokio this thread is about to block so the scheduler can use other threads.
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current()
                 .block_on(async { self.backend.run(&inputs, &mut ctx.outputs).await })
