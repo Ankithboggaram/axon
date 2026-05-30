@@ -36,6 +36,8 @@ pub enum OutputType {
 pub struct GrpcConfig {
     pub host: String,
     pub port: u16,
+    /// How often the streaming RPC polls Redis for updated features, in milliseconds.
+    pub stream_poll_interval_ms: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -173,6 +175,10 @@ impl Config {
 
         if self.grpc.port == 0 {
             anyhow::bail!("grpc.port must not be 0");
+        }
+
+        if self.grpc.stream_poll_interval_ms == 0 {
+            anyhow::bail!("grpc.stream_poll_interval_ms must not be 0");
         }
 
         if self.metrics.port == 0 {

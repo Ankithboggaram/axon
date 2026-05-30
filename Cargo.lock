@@ -83,6 +83,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arrayvec",
+ "async-stream",
  "async-trait",
  "deadpool-redis",
  "futures-util",

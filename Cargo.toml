@@ -32,6 +32,7 @@ tokio-stream = "0.1"
 tonic        = "0.12"
 tonic-health = "0.12"
 prost        = "0.13"
+async-stream = "0.3"
 
 # --- async trait support ---
 async-trait = "0.1"
