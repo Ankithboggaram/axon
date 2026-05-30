@@ -249,6 +249,3 @@ impl InferenceService for InferenceServer {
         Ok(Response::new(Box::pin(stream)))
     }
 }
-
-/// Re-exported for use in `main.rs` when setting service health status.
-pub use tonic_health::server::HealthReporter;
