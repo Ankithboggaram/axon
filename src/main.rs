@@ -166,6 +166,12 @@ async fn main() -> anyhow::Result<()> {
             tokio::spawn(serve_metrics(Arc::clone(&metrics), metrics_port));
             info!(port = metrics_port, "metrics server listening");
 
+            store
+                .ping()
+                .await
+                .map_err(|e| anyhow::anyhow!("startup readiness check failed: {e}"))?;
+            info!("feature store reachable");
+
             let (mut health_reporter, health_service) = tonic_health::server::health_reporter();
             health_reporter
                 .set_serving::<InferenceServiceServer<InferenceServer>>()

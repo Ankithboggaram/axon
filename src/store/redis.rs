@@ -39,6 +39,21 @@ impl std::fmt::Debug for RedisStore {
 
 #[async_trait]
 impl FeatureStore for RedisStore {
+    async fn ping(&self) -> anyhow::Result<()> {
+        let mut conn = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| anyhow::anyhow!("Redis ping: failed to get connection: {e}"))?;
+
+        deadpool_redis::redis::cmd("PING")
+            .query_async::<String>(&mut conn)
+            .await
+            .map_err(|e| anyhow::anyhow!("Redis ping failed: {e}"))?;
+
+        Ok(())
+    }
+
     async fn fetch_features(
         &self,
         entity_id: &str,

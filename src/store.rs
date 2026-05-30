@@ -18,6 +18,10 @@ pub enum FetchResult {
 
 #[async_trait]
 pub trait FeatureStore: std::fmt::Debug + Send + Sync {
+    /// Checks that the store is reachable. Called once at startup before
+    /// the gRPC health check is set to Serving.
+    async fn ping(&self) -> anyhow::Result<()>;
+
     /// Fetches features for the given entity and writes them into `dest`.
     ///
     /// Writes directly into the pre-allocated scratchpad buffer to avoid any
