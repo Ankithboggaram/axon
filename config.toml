@@ -1,6 +1,34 @@
-# --- infrastructure ---
+# Axon reference configuration.
+# Copy this file, fill in your values, and pass the path to axon at startup.
+#
+# Ideally, initializing axon should auto-fill most of these fields using metadata
+# of the model from the configured model registry.
+
+[grpc]
+host = "0.0.0.0"
+port = 50051
+
+# How often axon polls the feature store for updated features during a streaming session.
+# 1ms is about as low as you can go in redis.
+stream_poll_interval_ms = 1
+
+# Requests that take longer than this get cancelled. Set it above your model's
+# worst-case inference time or you'll see spurious timeouts under load.
+request_timeout_ms = 5000
+
+[backend]
+# Only "onnx_runtime" is supported right now. ("triton" support planned)
+type = "onnx_runtime"
+
+[registry]
+# Only "mlflow" is supported right now.
+type          = "mlflow"
+uri           = "http://localhost:5000"
+model_name    = "my_model"
+model_version = "latest"   # a version number or "latest"
 
 [store]
+# Only "redis" is supported right now. ("feast" support planned)
 type = "redis"
 host = "localhost"
 port = 6379
@@ -8,55 +36,60 @@ port = 6379
 [metrics]
 port = 9090
 
-# --- serving ---
-
-[grpc]
-host = "0.0.0.0"
-port = 50051
-
-[stream]
-source      = "binance"
-stream_keys = ["BTCUSDT", "ETHUSDT"]
-
-# --- model ---
-
-[backend]
-type  = "triton"   # "triton" | "onnx_runtime"
-model = "my_model"
-host  = "localhost"
-port  = 8001
-
-[registry]
-type          = "mlflow"
-uri           = "http://localhost:5000"
-model_name    = "my_model"
-model_version = "1"
-
-[model_schema]
+# Tensor names, types, and shapes must match exactly what's in the .onnx file.
+# Supported dtypes: float32 | float64 | int8 | int16 | int32 | int64
+#                   uint8 | uint16 | uint32 | uint64 | bool | string
 
 [[model_schema.inputs]]
 name  = "features"
-dtype = "fp32"   # fp32 | fp16 | int32 | int64 | bool | bytes
+dtype = "float32"
 shape = [1, 32]
 
 [[model_schema.outputs]]
-name  = "prediction"
-dtype = "fp32"
+name  = "score"
+dtype = "float32"
 shape = [1, 1]
 
+# Stages run in the order they appear here.
+# Any stage can take these optional observability options:
+#   timed        = true   # tracks p99/p999 latency in Prometheus
+#   instrumented = true   # emits a tracing span on each run
+#   retries      = 3      # retries up to N times before failing
+
+# Impute first so NaNs are gone before validate sees them.
+[[pipeline.stages]]
+type          = "impute"
+default_value = 0.0
+
+# Rejects anything with the wrong shape or a NaN/infinite value.
 [[pipeline.stages]]
 type           = "validate"
 expected_shape = [1, 32]
 
+# Clip to a safe range before normalising. (p1/p99 of your training data should work well)
 [[pipeline.stages]]
-type = "normalize"
-mean = 0.5
-std  = 0.1
+type = "clip"
+min  = -10.0
+max  =  10.0
 
+# Zero-mean unit-variance normalisation. Use the stats from your training data.
 [[pipeline.stages]]
-type = "infer"
+type  = "normalize"
+mean  = 0.0
+std   = 1.0
+timed = true
 
+# Runs the model.
+[[pipeline.stages]]
+type         = "infer"
+timed        = true
+instrumented = true
+
+# Turns the raw model output into a prediction.
+# "binary"      - threshold it, get back 1.0 or -1.0
+# "probability" - threshold it, get back the probability score
+# "raw"         - pass the output tensor through unchanged
 [[pipeline.stages]]
 type        = "postprocess"
-threshold   = 0.7
-output_type = "binary"   # "binary" | "probability" | "raw"
+threshold   = 0.5
+output_type = "binary"

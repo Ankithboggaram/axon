@@ -51,7 +51,7 @@ impl ConfigSeed {
         writeln!(out, "[grpc]").unwrap();
         writeln!(out, "host = \"0.0.0.0\"").unwrap();
         writeln!(out, "port = 50051").unwrap();
-        writeln!(out, "stream_poll_interval_ms = 100").unwrap();
+        writeln!(out, "stream_poll_interval_ms = 1").unwrap();
         writeln!(out, "request_timeout_ms = 5000").unwrap();
         writeln!(out).unwrap();
 
