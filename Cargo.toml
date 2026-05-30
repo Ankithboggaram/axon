@@ -33,6 +33,7 @@ tonic        = "0.12"
 tonic-health = "0.12"
 prost        = "0.13"
 async-stream = "0.3"
+tower        = { version = "0.4", features = ["timeout"] }
 
 # --- async trait support ---
 async-trait = "0.1"
