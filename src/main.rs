@@ -92,7 +92,7 @@ async fn main() -> anyhow::Result<()> {
 
             info!(
                 path = output,
-                "config written — fill in all TODO values before running axon serve"
+                "config written; fill in all TODO values before running axon serve"
             );
         }
 
@@ -224,7 +224,7 @@ fn init_tracing() {
 /// Serves Prometheus metrics over a minimal HTTP listener on the given port.
 ///
 /// Any TCP connection receives the full metrics payload regardless of the
-/// request path or method — Prometheus always scrapes GET /metrics, and we
+/// request path or method. Prometheus always scrapes GET /metrics, and we
 /// have no other routes to protect.
 async fn serve_metrics(metrics: Arc<Metrics>, port: u16) {
     use tokio::io::AsyncWriteExt as _;

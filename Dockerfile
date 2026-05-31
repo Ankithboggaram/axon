@@ -21,7 +21,7 @@ RUN mkdir -p /app/lib && \
     find /usr/lib -name "libgomp.so.1" 2>/dev/null | head -1 | xargs -I{} cp {} /app/lib/libgomp.so.1
 
 # Stage 2: runtime
-# Distroless — no shell, no package manager, minimal attack surface.
+# Distroless: no shell, no package manager, minimal attack surface.
 FROM gcr.io/distroless/cc-debian12 AS runtime
 
 WORKDIR /app
