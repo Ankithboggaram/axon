@@ -17,10 +17,11 @@ pub struct RegisteredModel {
     pub local_path: String,
 }
 
-/// Subset of config values that can be seeded from the registry.
+/// Subset of config values populated from the model registry during `axon init`.
 ///
 /// All fields are optional because registries vary in what they store.
-/// Fields left as `None` must be filled in manually in the generated config.
+/// Fields absent from the registry are `None` and appear as TODO placeholders
+/// in the generated config.
 #[derive(Debug, Default)]
 pub struct ConfigSeed {
     /// Input and output tensor specs, derived from the model signature if available.
@@ -35,9 +36,8 @@ pub struct ConfigSeed {
 impl ConfigSeed {
     /// Generates a starter config.toml string from the seed values.
     ///
-    /// Fields present in the seed are written with their values. Fields absent
-    /// are written as TODO placeholders so the operator knows what to fill in.
-    /// The returned string is ready to be written directly to `config.toml`.
+    /// Present fields are written with their values; absent fields appear as
+    /// TODO placeholders.
     pub fn generate_config(&self, model_name: &str, model_version: &str) -> String {
         let mut out = String::new();
 

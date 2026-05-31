@@ -32,9 +32,8 @@ struct PipelineBundle {
 
 /// The gRPC service implementation.
 ///
-/// Construct once at startup via `InferenceServer::new` and pass to
-/// `tonic::transport::Server`. All fields are cheaply cloneable (`Arc`s)
-/// so tonic can clone the server per connection.
+/// All fields are cheaply cloneable (`Arc`s) so tonic can clone the server
+/// per connection without duplicating the underlying state.
 #[derive(Clone)]
 pub struct InferenceServer {
     store: Arc<dyn FeatureStore>,

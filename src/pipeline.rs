@@ -12,7 +12,7 @@ pub mod stages;
 /// Maximum byte length for entity_id and request_id.
 ///
 /// 128 bytes covers UUIDs (36 bytes), compound identifiers, and symbol names
-/// with room to spare. The server layer must reject IDs that exceed this limit.
+/// with room to spare. The server layer rejects IDs that exceed this limit.
 pub const MAX_ID_LEN: usize = 128;
 
 #[derive(Debug)]

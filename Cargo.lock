@@ -1289,6 +1289,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 [[package]]
 name = "pipex"
 version = "0.1.0"
+source = "git+https://github.com/Ankithboggaram/pipex#1250a85a56ea3b5282ed0db389b8d1c82bd6973b"
 dependencies = [
  "tracing",
 ]

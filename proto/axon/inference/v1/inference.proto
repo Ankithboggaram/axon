@@ -9,41 +9,41 @@ service InferenceService {
   // Single prediction for a given entity.
   rpc Predict(PredictRequest) returns (PredictResponse);
 
-  // Continuous predictions for a given entity, streamed back as features update in Redis.
+  // Continuous predictions for a given entity, streamed back as features update in the configured feature store.
   rpc PredictStream(PredictStreamRequest) returns (stream PredictStreamResponse);
 }
 
-// If features is populated, they are used directly without a Redis lookup.
-// If empty, the feature vector is fetched from Redis by entity_id.
+// If `features` is populated, they are used directly without a feature store lookup.
+// If empty, the feature vector is fetched from the feature store by entity_id.
 message PredictRequest {
-  string              entity_id = 1;
-  repeated float      features  = 2;
-  map<string, string> metadata  = 3;
+  string entity_id = 1;
+  repeated float features = 2;
+  map<string, string> metadata = 3;
 }
 
 // Subscribes to continuous predictions for a single entity.
 message PredictStreamRequest {
-  string              entity_id = 1;
-  map<string, string> metadata  = 2;
+  string entity_id = 1;
+  map<string, string> metadata = 2;
 }
 
 // A single named output tensor from the model.
 // values holds the flattened tensor data; shape describes how to interpret it.
 message OutputTensor {
-  string         name   = 1;
+  string name = 1;
   repeated float values = 2;
-  repeated int64 shape  = 3;
+  repeated int64 shape = 3;
 }
 
 message PredictResponse {
-  string                entity_id    = 1;
-  repeated OutputTensor outputs      = 2;
-  int64                 timestamp_ms = 3;
+  string entity_id = 1;
+  repeated OutputTensor outputs = 2;
+  int64 timestamp_ms = 3;
 }
 
 // Same shape as PredictResponse, kept separate so the two RPCs can evolve independently.
 message PredictStreamResponse {
-  string                entity_id    = 1;
-  repeated OutputTensor outputs      = 2;
-  int64                 timestamp_ms = 3;
+  string entity_id = 1;
+  repeated OutputTensor outputs = 2;
+  int64 timestamp_ms = 3;
 }

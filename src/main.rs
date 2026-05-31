@@ -33,7 +33,7 @@ use crate::store::FeatureStore;
 use crate::store::redis::RedisStore;
 
 #[derive(Parser)]
-#[command(name = "axon", about = "High-performance ML inference serving engine")]
+#[command(name = "axon", about = "A configurable real-time ML inference engine")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -103,12 +103,10 @@ async fn main() -> anyhow::Result<()> {
                 .map_err(|e| anyhow::anyhow!("failed to load config from '{config_path}': {e}"))?;
             info!(path = config_path, "config loaded");
 
-            // Build registry client from config. New registry implementations add an arm here.
             let registry: Arc<dyn ModelRegistryClient> = match config.registry.registry_type {
                 RegistryType::Mlflow => Arc::new(MlflowClient::new(&config.registry.uri)?),
             };
 
-            // Build feature store from config. New store implementations add an arm here.
             let store: Arc<dyn FeatureStore> = match config.store.store_type {
                 StoreType::Redis => {
                     let url = format!("redis://{}:{}", config.store.host, config.store.port);
@@ -151,7 +149,6 @@ async fn main() -> anyhow::Result<()> {
                 Err(e) => tracing::warn!("could not generate Triton config: {e}"),
             }
 
-            // Build inference backend from config. New backend implementations add an arm here.
             let backend: Arc<dyn Backend> = match config.backend.backend_type {
                 BackendType::OnnxRuntime => Arc::new(OnnxBackend::new(&model.local_path)?),
                 BackendType::Triton => unreachable!("Triton rejected by Config::validate"),

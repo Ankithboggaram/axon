@@ -36,7 +36,7 @@ pub enum OutputType {
 pub struct GrpcConfig {
     pub host: String,
     pub port: u16,
-    /// How often the streaming RPC polls Redis for updated features, in milliseconds.
+    /// How often the streaming RPC polls the feature store for updated features, in milliseconds.
     pub stream_poll_interval_ms: u64,
     /// Maximum time allowed for a single RPC before it is cancelled, in milliseconds.
     pub request_timeout_ms: u64,

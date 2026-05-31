@@ -2,7 +2,7 @@
 name = "axon"
 version = "0.1.0"
 edition = "2024"
-description = "High-performance ML inference serving engine, part of the Cortex platform"
+description = "A configurable real-time ML inference engine, part of the Cortex platform"
 
 [profile.release]
 opt-level = 3
@@ -13,7 +13,7 @@ panic = "abort"     # removes stack unwinding machinery; smaller binary, no unwi
 [dependencies]
 
 # --- pipeline ---
-pipex   = { path = "../pipex" }
+pipex = { git = "https://github.com/Ankithboggaram/pipex" }
 ndarray = "0.17"
 
 # --- inference backend ---

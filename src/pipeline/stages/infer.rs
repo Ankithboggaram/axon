@@ -16,7 +16,7 @@ use crate::types::{MAX_TENSOR_NAME_LEN, NamedTensorRef};
 /// backend, which writes into them in place; zero allocation on the hot path.
 #[derive(Debug)]
 pub struct InferStage {
-    /// Shared reference to the inference backend (Triton or ONNX Runtime).
+    /// Shared reference to the configured inference backend.
     pub backend: Arc<dyn Backend>,
     /// Name of the input tensor as defined in model_schema.inputs.
     pub input_name: ArrayString<MAX_TENSOR_NAME_LEN>,
