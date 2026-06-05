@@ -1,9 +1,11 @@
 //! Wiring functions that construct the pipeline and scratchpad from config.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use arrayvec::ArrayString;
 use ndarray::{ArrayD, IxDyn};
+use pipex::deadline::Deadline;
 use pipex::dynamic_pipeline::Pipeline;
 use pipex::instrument::Instrumented;
 use pipex::metrics::{StageMetrics, Timed};
@@ -21,19 +23,91 @@ use crate::pipeline::stages::postprocess::PostprocessStage;
 use crate::pipeline::stages::validate::ValidateStage;
 use crate::types::{MAX_TENSOR_NAME_LEN, OutputBuffer};
 
+/// Routes metric handle creation or reuse through a single call site in `wrap`.
+///
+/// `Creating` collects new `StageMetrics` into the vec for Prometheus registration.
+/// `Reusing` draws from an existing slice so pool pipelines share the same handles.
+struct MetricsBridge<'a> {
+    new_metrics: &'a mut Vec<Arc<StageMetrics>>,
+    existing: Option<(&'a [Arc<StageMetrics>], usize)>,
+}
+
+impl<'a> MetricsBridge<'a> {
+    fn creating(new_metrics: &'a mut Vec<Arc<StageMetrics>>) -> Self {
+        Self {
+            new_metrics,
+            existing: None,
+        }
+    }
+
+    fn reusing(
+        new_metrics: &'a mut Vec<Arc<StageMetrics>>,
+        existing: &'a [Arc<StageMetrics>],
+    ) -> Self {
+        Self {
+            new_metrics,
+            existing: Some((existing, 0)),
+        }
+    }
+
+    /// Returns a metric handle for a timed stage, creating or reusing as appropriate.
+    fn get(&mut self, label: &'static str, timed: bool) -> Option<Arc<StageMetrics>> {
+        if !timed {
+            return None;
+        }
+        match &mut self.existing {
+            None => {
+                let m = StageMetrics::new(label);
+                self.new_metrics.push(Arc::clone(&m));
+                Some(m)
+            }
+            Some((slice, idx)) => {
+                let m = Arc::clone(&slice[*idx]);
+                *idx += 1;
+                Some(m)
+            }
+        }
+    }
+}
+
 /// Constructs a ready-to-run pipeline and its stage metrics from config.
 ///
 /// Returns the pipeline and a vec of metrics handles in stage order, one per
-/// stage that has `timed = true`. The caller shares these handles with the
-/// Prometheus exporter.
+/// stage that has `timed = true`. Pass the handles to `Metrics::new` so
+/// Prometheus can pull snapshots on each scrape.
 pub fn build(
     config: &Config,
     backend: Arc<dyn Backend>,
 ) -> anyhow::Result<(Pipeline<InferenceScratchpad>, Vec<Arc<StageMetrics>>)> {
     validate_ordering(&config.pipeline.stages)?;
+    let mut stage_metrics = Vec::new();
+    let mut bridge = MetricsBridge::creating(&mut stage_metrics);
+    let pipeline = build_pipeline(config, backend, &mut bridge)?;
+    Ok((pipeline, stage_metrics))
+}
 
-    let mut pipeline = Pipeline::new();
-    let mut stage_metrics: Vec<Arc<StageMetrics>> = Vec::new();
+/// Constructs an additional pipeline that shares the given stage metrics handles.
+///
+/// Used by the pipeline pool factory so all pool pipelines write to the same
+/// Prometheus metrics rather than creating isolated, unregistered handles.
+pub fn build_with_metrics(
+    config: &Config,
+    backend: Arc<dyn Backend>,
+    existing_metrics: &[Arc<StageMetrics>],
+) -> anyhow::Result<Pipeline<InferenceScratchpad>> {
+    let mut dummy = Vec::new();
+    let mut bridge = MetricsBridge::reusing(&mut dummy, existing_metrics);
+    build_pipeline(config, backend, &mut bridge)
+}
+
+/// Shared pipeline construction logic used by both `build` and `build_with_metrics`.
+fn build_pipeline(
+    config: &Config,
+    backend: Arc<dyn Backend>,
+    bridge: &mut MetricsBridge<'_>,
+) -> anyhow::Result<Pipeline<InferenceScratchpad>> {
+    let scratchpad = build_scratchpad(config)?;
+    let mut pipeline = Pipeline::new(scratchpad);
 
     for stage_config in &config.pipeline.stages {
         match stage_config {
@@ -60,12 +134,7 @@ pub fn build(
                 let stage = ValidateStage {
                     expected_shape: shape,
                 };
-                pipeline.push_boxed(wrap(
-                    Box::new(stage),
-                    observability,
-                    "validate",
-                    &mut stage_metrics,
-                ));
+                pipeline.push_boxed(wrap(Box::new(stage), observability, "validate", bridge));
             }
 
             StageConfig::Normalize {
@@ -73,17 +142,11 @@ pub fn build(
                 std,
                 observability,
             } => {
-                // std == 0 is already caught by Config::validate.
                 let stage = NormalizeStage {
                     mean: *mean,
                     inv_std: 1.0 / std,
                 };
-                pipeline.push_boxed(wrap(
-                    Box::new(stage),
-                    observability,
-                    "normalize",
-                    &mut stage_metrics,
-                ));
+                pipeline.push_boxed(wrap(Box::new(stage), observability, "normalize", bridge));
             }
 
             StageConfig::Clip {
@@ -98,12 +161,7 @@ pub fn build(
                     min: *min,
                     max: *max,
                 };
-                pipeline.push_boxed(wrap(
-                    Box::new(stage),
-                    observability,
-                    "clip",
-                    &mut stage_metrics,
-                ));
+                pipeline.push_boxed(wrap(Box::new(stage), observability, "clip", bridge));
             }
 
             StageConfig::Impute {
@@ -113,12 +171,7 @@ pub fn build(
                 let stage = ImputeStage {
                     default_value: *default_value,
                 };
-                pipeline.push_boxed(wrap(
-                    Box::new(stage),
-                    observability,
-                    "impute",
-                    &mut stage_metrics,
-                ));
+                pipeline.push_boxed(wrap(Box::new(stage), observability, "impute", bridge));
             }
 
             StageConfig::Infer { observability } => {
@@ -136,12 +189,7 @@ pub fn build(
                     backend: Arc::clone(&backend),
                     input_name,
                 };
-                pipeline.push_boxed(wrap(
-                    Box::new(stage),
-                    observability,
-                    "infer",
-                    &mut stage_metrics,
-                ));
+                pipeline.push_boxed(wrap(Box::new(stage), observability, "infer", bridge));
             }
 
             StageConfig::Postprocess {
@@ -153,24 +201,16 @@ pub fn build(
                     threshold: *threshold,
                     output_type: *output_type,
                 };
-                pipeline.push_boxed(wrap(
-                    Box::new(stage),
-                    observability,
-                    "postprocess",
-                    &mut stage_metrics,
-                ));
+                pipeline.push_boxed(wrap(Box::new(stage), observability, "postprocess", bridge));
             }
         }
     }
 
-    Ok((pipeline, stage_metrics))
+    Ok(pipeline)
 }
 
 /// Pre-allocates the scratchpad from the model schema.
-///
-/// Called once at startup. The input tensor and output buffers are sized to
-/// the shapes declared in model_schema so no allocation is needed per request.
-pub fn build_scratchpad(config: &Config) -> anyhow::Result<InferenceScratchpad> {
+fn build_scratchpad(config: &Config) -> anyhow::Result<InferenceScratchpad> {
     let input_shape: Vec<usize> = config.model_schema.inputs[0]
         .shape
         .iter()
@@ -243,14 +283,16 @@ fn validate_ordering(stages: &[StageConfig]) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Applies observability wrappers to a stage in order: Retry -> Instrumented -> Timed.
+/// Applies observability wrappers to a stage.
 ///
-/// Timed is outermost so it measures total latency including retries.
+/// Wrapping order: Retry -> Instrumented -> Deadline -> Timed.
+/// Timed is outermost so it measures total latency including all inner wrappers.
+/// Deadline is inside Timed so deadline breaches are captured in the latency histogram.
 fn wrap(
     stage: Box<dyn Stage<InferenceScratchpad>>,
     obs: &StageObservability,
     label: &'static str,
-    metrics: &mut Vec<Arc<StageMetrics>>,
+    bridge: &mut MetricsBridge<'_>,
 ) -> Box<dyn Stage<InferenceScratchpad>> {
     let stage: Box<dyn Stage<InferenceScratchpad>> = match obs.retries {
         Some(r) => Box::new(Retry::new(stage, r)),
@@ -263,11 +305,13 @@ fn wrap(
         stage
     };
 
-    if obs.timed.unwrap_or(false) {
-        let m = StageMetrics::new(label);
-        metrics.push(Arc::clone(&m));
-        Box::new(Timed::new(stage, m))
-    } else {
-        stage
+    let stage: Box<dyn Stage<InferenceScratchpad>> = match obs.deadline_ms {
+        Some(ms) => Box::new(Deadline::new(stage, Duration::from_millis(ms))),
+        None => stage,
+    };
+
+    match bridge.get(label, obs.timed.unwrap_or(false)) {
+        Some(m) => Box::new(Timed::new(stage, m)),
+        None => stage,
     }
 }

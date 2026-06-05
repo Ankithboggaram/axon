@@ -2,7 +2,7 @@
 
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BackendType {
     /// In-process ONNX Runtime backend. Model path is resolved from the registry at startup.
@@ -11,13 +11,13 @@ pub enum BackendType {
     Triton,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StoreType {
     Redis,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RegistryType {
     Mlflow,
@@ -32,7 +32,7 @@ pub enum OutputType {
     Raw,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct GrpcConfig {
     pub host: String,
     pub port: u16,
@@ -40,9 +40,13 @@ pub struct GrpcConfig {
     pub stream_poll_interval_ms: u64,
     /// Maximum time allowed for a single RPC before it is cancelled, in milliseconds.
     pub request_timeout_ms: u64,
+    /// Number of pipelines kept in the pool for concurrent request processing.
+    /// Defaults to the number of logical CPUs if not set.
+    #[serde(default)]
+    pub pool_size: Option<usize>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct BackendConfig {
     #[serde(rename = "type")]
     pub backend_type: BackendType,
@@ -54,7 +58,7 @@ pub struct BackendConfig {
     pub port: Option<u16>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct RegistryConfig {
     #[serde(rename = "type")]
     pub registry_type: RegistryType,
@@ -64,7 +68,7 @@ pub struct RegistryConfig {
     pub model_version: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct StoreConfig {
     #[serde(rename = "type")]
     pub store_type: StoreType,
@@ -72,13 +76,13 @@ pub struct StoreConfig {
     pub port: u16,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct MetricsConfig {
     pub port: u16,
 }
 
 /// Describes a single input or output tensor: name, data type, and shape.
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct TensorSpec {
     pub name: String,
     pub dtype: String,
@@ -86,14 +90,14 @@ pub struct TensorSpec {
 }
 
 /// Defines the input and output tensor shapes the model expects.
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct ModelSchemaConfig {
     pub inputs: Vec<TensorSpec>,
     pub outputs: Vec<TensorSpec>,
 }
 
 /// Per-stage observability options.
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct StageObservability {
     /// Wraps the stage with pipex::metrics::Timed to record p99/p999 latency.
     pub timed: Option<bool>,
@@ -101,12 +105,14 @@ pub struct StageObservability {
     pub instrumented: Option<bool>,
     /// Wraps the stage with pipex::retry::Retry. Value is the number of retries.
     pub retries: Option<u32>,
+    /// Wraps the stage with pipex::deadline::Deadline. Value is the budget in milliseconds.
+    pub deadline_ms: Option<u64>,
 }
 
 /// Each variant carries only the parameters relevant to that stage type.
 ///
 // TODO: Implement drift_detect, audit, argmax stages.
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StageConfig {
     Validate {
@@ -145,13 +151,13 @@ pub enum StageConfig {
     },
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct PipelineConfig {
     pub stages: Vec<StageConfig>,
 }
 
 /// Top-level config, owns all section configs.
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     pub grpc: GrpcConfig,
     pub backend: BackendConfig,

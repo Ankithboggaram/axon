@@ -4,9 +4,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use tokio::sync::Mutex;
-
 use pipex::dynamic_pipeline::Pipeline;
+use pipex::pool::PipelinePool;
 use pipex::scratchpad::Scratchpad;
 use tokio_stream::Stream;
 use tonic::{Request, Response, Status};
@@ -20,16 +19,6 @@ use crate::proto::{
 };
 use crate::store::{FeatureStore, FetchResult};
 
-/// Bundles the pipeline and its scratchpad together under one Mutex.
-///
-/// Both require exclusive access during a request. Keeping them together
-/// avoids the possibility of acquiring them in different orders across call
-/// sites, which would risk deadlock.
-struct PipelineBundle {
-    pipeline: Pipeline<InferenceScratchpad>,
-    scratchpad: InferenceScratchpad,
-}
-
 /// The gRPC service implementation.
 ///
 /// All fields are cheaply cloneable (`Arc`s) so tonic can clone the server
@@ -37,7 +26,7 @@ struct PipelineBundle {
 #[derive(Clone)]
 pub struct InferenceServer {
     store: Arc<dyn FeatureStore>,
-    bundle: Arc<Mutex<PipelineBundle>>,
+    pool: Arc<PipelinePool<Pipeline<InferenceScratchpad>>>,
     metrics: Arc<Metrics>,
     stream_poll_interval: Duration,
 }
@@ -45,17 +34,13 @@ pub struct InferenceServer {
 impl InferenceServer {
     pub fn new(
         store: Arc<dyn FeatureStore>,
-        pipeline: Pipeline<InferenceScratchpad>,
-        scratchpad: InferenceScratchpad,
+        pool: Arc<PipelinePool<Pipeline<InferenceScratchpad>>>,
         metrics: Arc<Metrics>,
         stream_poll_interval_ms: u64,
     ) -> Self {
         Self {
             store,
-            bundle: Arc::new(Mutex::new(PipelineBundle {
-                pipeline,
-                scratchpad,
-            })),
+            pool,
             metrics,
             stream_poll_interval: Duration::from_millis(stream_poll_interval_ms),
         }
@@ -70,27 +55,25 @@ impl InferenceServer {
         entity_id: &str,
         inline_features: &[f32],
     ) -> Result<PredictResponse, Status> {
-        let mut bundle = self.bundle.lock().await;
-        let PipelineBundle {
-            ref mut pipeline,
-            ref mut scratchpad,
-        } = *bundle;
+        let mut pipeline = self.pool.acquire();
 
-        scratchpad.reset();
-        scratchpad
-            .entity_id
-            .try_push_str(entity_id)
-            .map_err(|_| Status::invalid_argument("entity_id exceeds maximum length"))?;
-        scratchpad.timestamp_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64;
+        {
+            let ctx = pipeline.context_mut();
+            ctx.reset();
+            ctx.entity_id
+                .try_push_str(entity_id)
+                .map_err(|_| Status::invalid_argument("entity_id exceeds maximum length"))?;
+            ctx.timestamp_ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as i64;
+        }
 
         if inline_features.is_empty() {
             let fetch_start = Instant::now();
             let result = self
                 .store
-                .fetch_features(entity_id, &mut scratchpad.input)
+                .fetch_features(entity_id, &mut pipeline.context_mut().input)
                 .await
                 .map_err(|e| {
                     error!(entity_id, error = %e, "feature store error");
@@ -109,26 +92,27 @@ impl InferenceServer {
                 );
             }
         } else {
-            if inline_features.len() != scratchpad.input.len() {
+            let ctx = pipeline.context_mut();
+            if inline_features.len() != ctx.input.len() {
                 return Err(Status::invalid_argument(format!(
                     "expected {} features, got {}",
-                    scratchpad.input.len(),
+                    ctx.input.len(),
                     inline_features.len()
                 )));
             }
-            scratchpad
-                .input
+            ctx.input
                 .as_slice_mut()
                 .expect("contiguous array")
                 .copy_from_slice(inline_features);
         }
 
-        pipeline.run(scratchpad).map_err(|e| {
+        pipeline.run().map_err(|e| {
             error!(entity_id, error = %e, "pipeline error");
             Status::internal(format!("pipeline error: {e}"))
         })?;
 
-        let outputs = scratchpad
+        let ctx = pipeline.context();
+        let outputs = ctx
             .outputs
             .iter()
             .map(|out| OutputTensor {
@@ -141,7 +125,7 @@ impl InferenceServer {
         Ok(PredictResponse {
             entity_id: entity_id.to_owned(),
             outputs,
-            timestamp_ms: scratchpad.timestamp_ms,
+            timestamp_ms: ctx.timestamp_ms,
         })
     }
 }
