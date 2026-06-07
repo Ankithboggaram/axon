@@ -8,6 +8,8 @@ use prometheus::{
     TextEncoder,
 };
 
+use crate::error::ServeError;
+
 /// Holds all Prometheus metric handles for the axon application.
 ///
 /// Construct once at startup and share via `Arc<Metrics>`. The individual
@@ -37,7 +39,7 @@ pub struct Metrics {
 
 impl Metrics {
     /// Registers all metrics into a new Prometheus registry.
-    pub fn new(stage_handles: Vec<Arc<StageMetrics>>) -> anyhow::Result<Self> {
+    pub fn new(stage_handles: Vec<Arc<StageMetrics>>) -> Result<Self, ServeError> {
         let registry = Registry::new();
 
         let requests_total = CounterVec::new(
@@ -47,7 +49,10 @@ impl Metrics {
             ),
             &["rpc", "status"],
         )
-        .map_err(|e| anyhow::anyhow!("failed to create requests_total: {e}"))?;
+        .map_err(|e| ServeError::MetricsRegistration {
+            name: "axon_requests_total",
+            reason: e.to_string(),
+        })?;
 
         let request_duration_seconds = HistogramVec::new(
             HistogramOpts::new(
@@ -57,7 +62,10 @@ impl Metrics {
             .buckets(vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0]),
             &["rpc"],
         )
-        .map_err(|e| anyhow::anyhow!("failed to create request_duration_seconds: {e}"))?;
+        .map_err(|e| ServeError::MetricsRegistration {
+            name: "axon_request_duration_seconds",
+            reason: e.to_string(),
+        })?;
 
         let store_fetch_duration_seconds = Histogram::with_opts(
             HistogramOpts::new(
@@ -66,31 +74,46 @@ impl Metrics {
             )
             .buckets(vec![0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05]),
         )
-        .map_err(|e| anyhow::anyhow!("failed to create store_fetch_duration_seconds: {e}"))?;
+        .map_err(|e| ServeError::MetricsRegistration {
+            name: "axon_store_fetch_duration_seconds",
+            reason: e.to_string(),
+        })?;
 
         let store_misses_total = Counter::new(
             "axon_store_misses_total",
             "Total feature store lookups that returned no entry.",
         )
-        .map_err(|e| anyhow::anyhow!("failed to create store_misses_total: {e}"))?;
+        .map_err(|e| ServeError::MetricsRegistration {
+            name: "axon_store_misses_total",
+            reason: e.to_string(),
+        })?;
 
         let stage_p99_ns = GaugeVec::new(
             Opts::new("axon_stage_p99_ns", "Stage p99 latency in nanoseconds."),
             &["stage"],
         )
-        .map_err(|e| anyhow::anyhow!("failed to create stage_p99_ns: {e}"))?;
+        .map_err(|e| ServeError::MetricsRegistration {
+            name: "axon_stage_p99_ns",
+            reason: e.to_string(),
+        })?;
 
         let stage_p999_ns = GaugeVec::new(
             Opts::new("axon_stage_p999_ns", "Stage p999 latency in nanoseconds."),
             &["stage"],
         )
-        .map_err(|e| anyhow::anyhow!("failed to create stage_p999_ns: {e}"))?;
+        .map_err(|e| ServeError::MetricsRegistration {
+            name: "axon_stage_p999_ns",
+            reason: e.to_string(),
+        })?;
 
         let stage_count_total = GaugeVec::new(
             Opts::new("axon_stage_count_total", "Total stage executions."),
             &["stage"],
         )
-        .map_err(|e| anyhow::anyhow!("failed to create stage_count_total: {e}"))?;
+        .map_err(|e| ServeError::MetricsRegistration {
+            name: "axon_stage_count_total",
+            reason: e.to_string(),
+        })?;
 
         let stage_error_rate = GaugeVec::new(
             Opts::new(
@@ -99,32 +122,59 @@ impl Metrics {
             ),
             &["stage"],
         )
-        .map_err(|e| anyhow::anyhow!("failed to create stage_error_rate: {e}"))?;
+        .map_err(|e| ServeError::MetricsRegistration {
+            name: "axon_stage_error_rate",
+            reason: e.to_string(),
+        })?;
 
         registry
             .register(Box::new(requests_total.clone()))
-            .map_err(|e| anyhow::anyhow!("failed to register requests_total: {e}"))?;
+            .map_err(|e| ServeError::MetricsRegistration {
+                name: "axon_requests_total",
+                reason: e.to_string(),
+            })?;
         registry
             .register(Box::new(request_duration_seconds.clone()))
-            .map_err(|e| anyhow::anyhow!("failed to register request_duration_seconds: {e}"))?;
+            .map_err(|e| ServeError::MetricsRegistration {
+                name: "axon_request_duration_seconds",
+                reason: e.to_string(),
+            })?;
         registry
             .register(Box::new(store_fetch_duration_seconds.clone()))
-            .map_err(|e| anyhow::anyhow!("failed to register store_fetch_duration_seconds: {e}"))?;
+            .map_err(|e| ServeError::MetricsRegistration {
+                name: "axon_store_fetch_duration_seconds",
+                reason: e.to_string(),
+            })?;
         registry
             .register(Box::new(store_misses_total.clone()))
-            .map_err(|e| anyhow::anyhow!("failed to register store_misses_total: {e}"))?;
+            .map_err(|e| ServeError::MetricsRegistration {
+                name: "axon_store_misses_total",
+                reason: e.to_string(),
+            })?;
         registry
             .register(Box::new(stage_p99_ns.clone()))
-            .map_err(|e| anyhow::anyhow!("failed to register stage_p99_ns: {e}"))?;
+            .map_err(|e| ServeError::MetricsRegistration {
+                name: "axon_stage_p99_ns",
+                reason: e.to_string(),
+            })?;
         registry
             .register(Box::new(stage_p999_ns.clone()))
-            .map_err(|e| anyhow::anyhow!("failed to register stage_p999_ns: {e}"))?;
+            .map_err(|e| ServeError::MetricsRegistration {
+                name: "axon_stage_p999_ns",
+                reason: e.to_string(),
+            })?;
         registry
             .register(Box::new(stage_count_total.clone()))
-            .map_err(|e| anyhow::anyhow!("failed to register stage_count_total: {e}"))?;
+            .map_err(|e| ServeError::MetricsRegistration {
+                name: "axon_stage_count_total",
+                reason: e.to_string(),
+            })?;
         registry
             .register(Box::new(stage_error_rate.clone()))
-            .map_err(|e| anyhow::anyhow!("failed to register stage_error_rate: {e}"))?;
+            .map_err(|e| ServeError::MetricsRegistration {
+                name: "axon_stage_error_rate",
+                reason: e.to_string(),
+            })?;
 
         Ok(Self {
             registry,
@@ -145,12 +195,12 @@ impl Metrics {
     /// Refreshes stage gauge values from the latest per-stage snapshots immediately
     /// before encoding, so Prometheus always receives up-to-date values without
     /// requiring a background task.
-    pub fn render(&self) -> anyhow::Result<String> {
+    pub fn render(&self) -> Result<String, ServeError> {
         self.refresh_stage_snapshots();
         let families = self.registry.gather();
         TextEncoder::new()
             .encode_to_string(&families)
-            .map_err(|e| anyhow::anyhow!("failed to encode metrics: {e}"))
+            .map_err(|e| ServeError::MetricsEncoding(e.to_string()))
     }
 
     /// Pulls the latest snapshot from each stage metrics handle and updates gauges.

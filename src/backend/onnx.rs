@@ -8,6 +8,7 @@ use ort::session::builder::GraphOptimizationLevel;
 use ort::value::TensorRef;
 
 use crate::backend::Backend;
+use crate::error::BackendError;
 use crate::types::{NamedTensorRef, OutputBuffer};
 
 /// In-process inference backend powered by ONNX Runtime.
@@ -24,13 +25,21 @@ impl OnnxBackend {
     ///
     /// Applies level-3 graph optimization at load time so the cost is paid
     /// once at startup rather than on the first request.
-    pub fn new(model_path: &str) -> anyhow::Result<Self> {
+    pub fn new(model_path: &str) -> Result<Self, BackendError> {
         let session = Session::builder()
-            .map_err(|e| anyhow::anyhow!("failed to create session builder: {e}"))?
+            .map_err(|e| {
+                BackendError::SessionCreation(format!("failed to create session builder: {e}"))
+            })?
             .with_optimization_level(GraphOptimizationLevel::Level3)
-            .map_err(|e| anyhow::anyhow!("failed to set optimization level: {e}"))?
+            .map_err(|e| {
+                BackendError::SessionCreation(format!("failed to set optimization level: {e}"))
+            })?
             .commit_from_file(model_path)
-            .map_err(|e| anyhow::anyhow!("failed to load model from {model_path}: {e}"))?;
+            .map_err(|e| {
+                BackendError::SessionCreation(format!(
+                    "failed to load model from {model_path}: {e}"
+                ))
+            })?;
         Ok(Self {
             session: Mutex::new(session),
         })
@@ -49,30 +58,32 @@ impl Backend for OnnxBackend {
         &self,
         inputs: &[NamedTensorRef<'_>],
         outputs: &mut [OutputBuffer],
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), BackendError> {
         // TensorRef borrows from the scratchpad, so no copy on the input side.
         let ort_inputs = inputs
             .iter()
-            .map(|t| -> anyhow::Result<_> {
+            .map(|t| -> Result<_, BackendError> {
                 let tensor = TensorRef::from_array_view(t.data.view())
-                    .map_err(|e| anyhow::anyhow!("failed to create input tensor: {e}"))?
+                    .map_err(|e| {
+                        BackendError::InferenceFailed(format!("failed to create input tensor: {e}"))
+                    })?
                     .into_dyn();
                 Ok((t.name, tensor))
             })
-            .collect::<anyhow::Result<Vec<_>>>()?;
+            .collect::<Result<Vec<_>, BackendError>>()?;
 
         // Guard must outlive ort_outputs, which borrows from the session.
         let mut session = self.session.lock().unwrap();
         let ort_outputs = session
             .run(ort_inputs)
-            .map_err(|e| anyhow::anyhow!("inference failed: {e}"))?;
+            .map_err(|e| BackendError::InferenceFailed(format!("inference failed: {e}")))?;
 
         // One copy per output: ORT owns its output buffers, so we copy into
         // the scratchpad's pre-allocated OutputBuffer for the rest of the pipeline.
         for (i, out_buf) in outputs.iter_mut().enumerate() {
-            let view = ort_outputs[i]
-                .try_extract_array::<f32>()
-                .map_err(|e| anyhow::anyhow!("failed to extract output {i}: {e}"))?;
+            let view = ort_outputs[i].try_extract_array::<f32>().map_err(|e| {
+                BackendError::InferenceFailed(format!("failed to extract output {i}: {e}"))
+            })?;
             out_buf.data.assign(&view);
         }
 

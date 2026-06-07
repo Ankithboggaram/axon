@@ -187,10 +187,18 @@ impl ConfigSeed {
 #[async_trait]
 pub trait ModelRegistryClient: std::fmt::Debug + Send + Sync {
     /// Fetches the model artifact and returns its local path and metadata.
-    async fn fetch_model(&self, name: &str, version: &str) -> anyhow::Result<RegisteredModel>;
+    async fn fetch_model(
+        &self,
+        name: &str,
+        version: &str,
+    ) -> Result<RegisteredModel, crate::error::RegistryError>;
 
     /// Fetches model signature and logged params to seed a starter config.
-    async fn fetch_config_seed(&self, name: &str, version: &str) -> anyhow::Result<ConfigSeed>;
+    async fn fetch_config_seed(
+        &self,
+        name: &str,
+        version: &str,
+    ) -> Result<ConfigSeed, crate::error::RegistryError>;
 }
 
 #[cfg(test)]

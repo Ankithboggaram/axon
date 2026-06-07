@@ -2,6 +2,8 @@
 
 use serde::Deserialize;
 
+use crate::error::ConfigError;
+
 #[non_exhaustive]
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -174,69 +176,105 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load(path: &str) -> anyhow::Result<Self> {
+    pub fn load(path: &str) -> Result<Self, ConfigError> {
         let contents = std::fs::read_to_string(path)?;
         let config: Self = toml::from_str(&contents)?;
         config.validate()?;
         Ok(config)
     }
 
-    pub fn validate(&self) -> anyhow::Result<()> {
+    pub fn validate(&self) -> Result<(), ConfigError> {
         if self.pipeline.stages.is_empty() {
-            anyhow::bail!("pipeline must have at least one stage");
+            return Err(ConfigError::Invalid {
+                field: "pipeline.stages",
+                reason: "must have at least one stage".into(),
+            });
         }
 
         if self.grpc.port == 0 {
-            anyhow::bail!("grpc.port must not be 0");
+            return Err(ConfigError::Invalid {
+                field: "grpc.port",
+                reason: "must not be 0".into(),
+            });
         }
 
         if self.grpc.stream_poll_interval_ms == 0 {
-            anyhow::bail!("grpc.stream_poll_interval_ms must not be 0");
+            return Err(ConfigError::Invalid {
+                field: "grpc.stream_poll_interval_ms",
+                reason: "must not be 0".into(),
+            });
         }
 
         if self.grpc.request_timeout_ms == 0 {
-            anyhow::bail!("grpc.request_timeout_ms must not be 0");
+            return Err(ConfigError::Invalid {
+                field: "grpc.request_timeout_ms",
+                reason: "must not be 0".into(),
+            });
         }
 
         if self.metrics.port == 0 {
-            anyhow::bail!("metrics.port must not be 0");
+            return Err(ConfigError::Invalid {
+                field: "metrics.port",
+                reason: "must not be 0".into(),
+            });
         }
 
         match self.backend.backend_type {
             BackendType::Triton => {
-                anyhow::bail!("Triton backend is not yet implemented; use onnx_runtime");
+                return Err(ConfigError::Invalid {
+                    field: "backend.type",
+                    reason: "Triton is not yet implemented; use onnx_runtime".into(),
+                });
             }
             BackendType::OnnxRuntime => {}
         }
 
         if self.store.host.is_empty() {
-            anyhow::bail!("store.host must not be empty");
+            return Err(ConfigError::Invalid {
+                field: "store.host",
+                reason: "must not be empty".into(),
+            });
         }
 
         if self.store.port == 0 {
-            anyhow::bail!("store.port must not be 0");
+            return Err(ConfigError::Invalid {
+                field: "store.port",
+                reason: "must not be 0".into(),
+            });
         }
 
         if self.model_schema.inputs.is_empty() {
-            anyhow::bail!("model_schema must define at least one input tensor");
+            return Err(ConfigError::Invalid {
+                field: "model_schema.inputs",
+                reason: "must define at least one tensor".into(),
+            });
         }
 
         if self.model_schema.inputs.len() > 1 {
-            anyhow::bail!(
-                "model_schema defines {} input tensors; only one input is supported in Phase 1",
-                self.model_schema.inputs.len()
-            );
+            return Err(ConfigError::Invalid {
+                field: "model_schema.inputs",
+                reason: format!(
+                    "defines {} tensors; only one input is supported",
+                    self.model_schema.inputs.len()
+                ),
+            });
         }
 
         if self.model_schema.outputs.is_empty() {
-            anyhow::bail!("model_schema must define at least one output tensor");
+            return Err(ConfigError::Invalid {
+                field: "model_schema.outputs",
+                reason: "must define at least one tensor".into(),
+            });
         }
 
         for stage in &self.pipeline.stages {
             if let StageConfig::Normalize { std, .. } = stage
                 && *std == 0.0
             {
-                anyhow::bail!("normalize stage: std must not be 0 (division by zero)");
+                return Err(ConfigError::Invalid {
+                    field: "pipeline.stages[normalize].std",
+                    reason: "must not be 0 (division by zero)".into(),
+                });
             }
         }
 

@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 
+use crate::error::BackendError;
 use crate::types::{NamedTensorRef, OutputBuffer};
 
 pub mod onnx;
@@ -15,5 +16,5 @@ pub trait Backend: std::fmt::Debug + Send + Sync {
         &self,
         inputs: &[NamedTensorRef<'_>],
         outputs: &mut [OutputBuffer],
-    ) -> anyhow::Result<()>;
+    ) -> Result<(), BackendError>;
 }

@@ -57,6 +57,7 @@ mod tests {
 
     use super::*;
     use crate::backend::Backend;
+    use crate::error::BackendError;
     use crate::pipeline::InferenceScratchpad;
     use crate::types::{NamedTensorRef, OutputBuffer};
 
@@ -85,7 +86,7 @@ mod tests {
             &self,
             _inputs: &[NamedTensorRef<'_>],
             outputs: &mut [OutputBuffer],
-        ) -> anyhow::Result<()> {
+        ) -> Result<(), BackendError> {
             for out in outputs.iter_mut() {
                 out.data.fill(self.output_value);
             }
@@ -102,8 +103,8 @@ mod tests {
             &self,
             _inputs: &[NamedTensorRef<'_>],
             _outputs: &mut [OutputBuffer],
-        ) -> anyhow::Result<()> {
-            anyhow::bail!("backend exploded")
+        ) -> Result<(), BackendError> {
+            Err(BackendError::InferenceFailed("backend exploded".into()))
         }
     }
 
@@ -119,7 +120,7 @@ mod tests {
             &self,
             inputs: &[NamedTensorRef<'_>],
             _outputs: &mut [OutputBuffer],
-        ) -> anyhow::Result<()> {
+        ) -> Result<(), BackendError> {
             *self.captured.lock().unwrap() = inputs[0].name.to_owned();
             Ok(())
         }

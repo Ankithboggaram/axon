@@ -2,6 +2,7 @@
 
 pub mod backend;
 pub mod config;
+pub mod error;
 pub mod proto {
     tonic::include_proto!("axon.inference.v1");
 }

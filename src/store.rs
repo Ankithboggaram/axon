@@ -3,6 +3,8 @@
 use async_trait::async_trait;
 use ndarray::ArrayD;
 
+use crate::error::StoreError;
+
 pub mod redis;
 
 /// Outcome of a feature fetch.
@@ -21,7 +23,7 @@ pub enum FetchResult {
 pub trait FeatureStore: std::fmt::Debug + Send + Sync {
     /// Checks that the store is reachable. Called once at startup before
     /// the gRPC health check is set to Serving.
-    async fn ping(&self) -> anyhow::Result<()>;
+    async fn ping(&self) -> Result<(), StoreError>;
 
     /// Fetches features for the given entity and writes them into `dest`.
     ///
@@ -32,5 +34,5 @@ pub trait FeatureStore: std::fmt::Debug + Send + Sync {
         &self,
         entity_id: &str,
         dest: &mut ArrayD<f32>,
-    ) -> anyhow::Result<FetchResult>;
+    ) -> Result<FetchResult, StoreError>;
 }

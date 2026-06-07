@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 
 use crate::config::{ModelSchemaConfig, TensorSpec};
+use crate::error::RegistryError;
 use crate::registry::{ConfigSeed, ModelRegistryClient, RegisteredModel};
 
 pub struct MlflowClient {
@@ -17,10 +18,10 @@ pub struct MlflowClient {
 }
 
 impl MlflowClient {
-    pub fn new(tracking_uri: &str) -> anyhow::Result<Self> {
+    pub fn new(tracking_uri: &str) -> Result<Self, RegistryError> {
         let http = reqwest::Client::builder()
             .build()
-            .map_err(|e| anyhow::anyhow!("failed to build HTTP client: {e}"))?;
+            .map_err(|e| RegistryError::HttpClient(e.to_string()))?;
         Ok(Self {
             tracking_uri: tracking_uri.trim_end_matches('/').to_owned(),
             http,
@@ -28,7 +29,7 @@ impl MlflowClient {
     }
 
     /// Resolves "latest" to a concrete version number; passes through anything else unchanged.
-    async fn resolve_version(&self, name: &str, version: &str) -> anyhow::Result<String> {
+    async fn resolve_version(&self, name: &str, version: &str) -> Result<String, RegistryError> {
         if version != "latest" {
             return Ok(version.to_owned());
         }
@@ -42,14 +43,13 @@ impl MlflowClient {
             .query(&[("name", name)])
             .send()
             .await
-            .map_err(|e| anyhow::anyhow!("failed to fetch latest versions: {e}"))?;
+            .map_err(|e| RegistryError::Request(format!("failed to fetch latest versions: {e}")))?;
 
         check_status(&resp, "latest versions")?;
 
-        let data: LatestVersionsResponse = resp
-            .json()
-            .await
-            .map_err(|e| anyhow::anyhow!("failed to parse latest versions response: {e}"))?;
+        let data: LatestVersionsResponse = resp.json().await.map_err(|e| {
+            RegistryError::Parse(format!("failed to parse latest versions response: {e}"))
+        })?;
 
         data.model_versions
             .into_iter()
@@ -60,24 +60,26 @@ impl MlflowClient {
                 })
             })
             .map(|v| v.version)
-            .ok_or_else(|| anyhow::anyhow!("no versions found for model '{name}'"))
+            .ok_or_else(|| RegistryError::ModelNotFound {
+                name: name.to_owned(),
+            })
     }
 
-    async fn get_run_params(&self, run_id: &str) -> anyhow::Result<HashMap<String, String>> {
+    async fn get_run_params(&self, run_id: &str) -> Result<HashMap<String, String>, RegistryError> {
         let resp = self
             .http
             .get(format!("{}/api/2.0/mlflow/runs/get", self.tracking_uri))
             .query(&[("run_id", run_id)])
             .send()
             .await
-            .map_err(|e| anyhow::anyhow!("failed to fetch run: {e}"))?;
+            .map_err(|e| RegistryError::Request(format!("failed to fetch run: {e}")))?;
 
         check_status(&resp, "run")?;
 
         let data: RunResponse = resp
             .json()
             .await
-            .map_err(|e| anyhow::anyhow!("failed to parse run response: {e}"))?;
+            .map_err(|e| RegistryError::Parse(format!("failed to parse run response: {e}")))?;
 
         Ok(data
             .run
@@ -90,25 +92,23 @@ impl MlflowClient {
     }
 
     /// Downloads the MLmodel metadata file and returns its text.
-    async fn download_mlmodel(&self, name: &str, version: &str) -> anyhow::Result<String> {
+    async fn download_mlmodel(&self, name: &str, version: &str) -> Result<String, RegistryError> {
         self.get_artifact(name, version, "MLmodel")
             .await?
             .text()
             .await
-            .map_err(|e| anyhow::anyhow!("failed to read MLmodel response: {e}"))
+            .map_err(|e| RegistryError::Request(format!("failed to read MLmodel response: {e}")))
     }
 
     /// Downloads the ONNX artifact to a local temp directory and returns the path.
     ///
     /// Streams directly to disk to avoid buffering the entire model in memory.
-    async fn download_artifact(&self, name: &str, version: &str) -> anyhow::Result<PathBuf> {
+    async fn download_artifact(&self, name: &str, version: &str) -> Result<PathBuf, RegistryError> {
         let dir = std::env::temp_dir().join("axon");
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| anyhow::anyhow!("failed to create temp dir: {e}"))?;
+        std::fs::create_dir_all(&dir)?;
 
         let path = dir.join(format!("{name}_v{version}.onnx"));
-        let mut file = std::fs::File::create(&path)
-            .map_err(|e| anyhow::anyhow!("failed to create artifact file: {e}"))?;
+        let mut file = std::fs::File::create(&path)?;
 
         let mut stream = self
             .get_artifact(name, version, "model.onnx")
@@ -116,9 +116,9 @@ impl MlflowClient {
             .bytes_stream();
 
         while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|e| anyhow::anyhow!("artifact stream error: {e}"))?;
-            std::io::Write::write_all(&mut file, &chunk)
-                .map_err(|e| anyhow::anyhow!("failed to write artifact chunk: {e}"))?;
+            let chunk =
+                chunk.map_err(|e| RegistryError::Request(format!("artifact stream error: {e}")))?;
+            std::io::Write::write_all(&mut file, &chunk)?;
         }
 
         Ok(path)
@@ -130,14 +130,16 @@ impl MlflowClient {
         name: &str,
         version: &str,
         path: &str,
-    ) -> anyhow::Result<reqwest::Response> {
+    ) -> Result<reqwest::Response, RegistryError> {
         let resp = self
             .http
             .get(format!("{}/model-versions/get-artifact", self.tracking_uri))
             .query(&[("name", name), ("version", version), ("path", path)])
             .send()
             .await
-            .map_err(|e| anyhow::anyhow!("failed to request artifact '{path}': {e}"))?;
+            .map_err(|e| {
+                RegistryError::Request(format!("failed to request artifact '{path}': {e}"))
+            })?;
 
         check_status(&resp, path)?;
 
@@ -155,7 +157,11 @@ impl std::fmt::Debug for MlflowClient {
 
 #[async_trait]
 impl ModelRegistryClient for MlflowClient {
-    async fn fetch_model(&self, name: &str, version: &str) -> anyhow::Result<RegisteredModel> {
+    async fn fetch_model(
+        &self,
+        name: &str,
+        version: &str,
+    ) -> Result<RegisteredModel, RegistryError> {
         let resolved = self.resolve_version(name, version).await?;
         let local_path = self.download_artifact(name, &resolved).await?;
 
@@ -166,19 +172,23 @@ impl ModelRegistryClient for MlflowClient {
         })
     }
 
-    async fn fetch_config_seed(&self, name: &str, version: &str) -> anyhow::Result<ConfigSeed> {
+    async fn fetch_config_seed(
+        &self,
+        name: &str,
+        version: &str,
+    ) -> Result<ConfigSeed, RegistryError> {
         let resolved = self.resolve_version(name, version).await?;
         let mlmodel_text = self.download_mlmodel(name, &resolved).await?;
 
         // Parse once: MLmodel contains both the signature and the run_id.
         let mlmodel: MlModelFile = serde_yaml_ng::from_str(&mlmodel_text)
-            .map_err(|e| anyhow::anyhow!("failed to parse MLmodel YAML: {e}"))?;
+            .map_err(|e| RegistryError::Parse(format!("failed to parse MLmodel YAML: {e}")))?;
 
         let run_id = mlmodel.run_id.ok_or_else(|| {
-            anyhow::anyhow!(
+            RegistryError::Parse(format!(
                 "model '{name}' v{resolved} has no associated training run; \
                  params and schema cannot be seeded automatically"
-            )
+            ))
         })?;
 
         let params = self.get_run_params(&run_id).await?;
@@ -196,9 +206,12 @@ impl ModelRegistryClient for MlflowClient {
 
 /// Returns an error if the response status is not 2xx.
 #[cold]
-fn check_status(resp: &reqwest::Response, context: &str) -> anyhow::Result<()> {
+fn check_status(resp: &reqwest::Response, context: &str) -> Result<(), RegistryError> {
     if !resp.status().is_success() {
-        anyhow::bail!("MLflow returned {} for {context}", resp.status());
+        return Err(RegistryError::Request(format!(
+            "MLflow returned {} for {context}",
+            resp.status()
+        )));
     }
     Ok(())
 }
@@ -207,26 +220,30 @@ fn check_status(resp: &reqwest::Response, context: &str) -> anyhow::Result<()> {
 ///
 /// Fails if the signature block is absent, or if any tensor in the signature
 /// is not a tensor type (e.g. a column/tabular type), since axon only supports tensors.
-fn parse_model_schema(signature: Option<MlModelSignature>) -> anyhow::Result<ModelSchemaConfig> {
+fn parse_model_schema(
+    signature: Option<MlModelSignature>,
+) -> Result<ModelSchemaConfig, RegistryError> {
     let sig = signature.ok_or_else(|| {
-        anyhow::anyhow!(
+        RegistryError::Parse(
             "MLmodel has no signature block; log the model with mlflow.models.infer_signature()"
+                .into(),
         )
     })?;
 
-    let raw_inputs: Vec<MlTensorEntry> = serde_json::from_str(&sig.inputs)
-        .map_err(|e| anyhow::anyhow!("failed to parse MLmodel signature inputs: {e}"))?;
-    let raw_outputs: Vec<MlTensorEntry> = serde_json::from_str(&sig.outputs)
-        .map_err(|e| anyhow::anyhow!("failed to parse MLmodel signature outputs: {e}"))?;
+    let raw_inputs: Vec<MlTensorEntry> = serde_json::from_str(&sig.inputs).map_err(|e| {
+        RegistryError::Parse(format!("failed to parse MLmodel signature inputs: {e}"))
+    })?;
+    let raw_outputs: Vec<MlTensorEntry> = serde_json::from_str(&sig.outputs).map_err(|e| {
+        RegistryError::Parse(format!("failed to parse MLmodel signature outputs: {e}"))
+    })?;
 
-    let convert = |entry: MlTensorEntry| -> anyhow::Result<TensorSpec> {
+    let convert = |entry: MlTensorEntry| -> Result<TensorSpec, RegistryError> {
         let spec = entry.tensor_spec.ok_or_else(|| {
-            anyhow::anyhow!(
+            RegistryError::Parse(format!(
                 "MLmodel signature field '{}' has type '{}', not 'tensor'; \
                  axon only supports tensor inputs and outputs",
-                entry.name,
-                entry.field_type,
-            )
+                entry.name, entry.field_type,
+            ))
         })?;
         Ok(TensorSpec {
             name: entry.name,
@@ -239,11 +256,11 @@ fn parse_model_schema(signature: Option<MlModelSignature>) -> anyhow::Result<Mod
         inputs: raw_inputs
             .into_iter()
             .map(convert)
-            .collect::<anyhow::Result<_>>()?,
+            .collect::<Result<_, RegistryError>>()?,
         outputs: raw_outputs
             .into_iter()
             .map(convert)
-            .collect::<anyhow::Result<_>>()?,
+            .collect::<Result<_, RegistryError>>()?,
     })
 }
 
