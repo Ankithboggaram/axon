@@ -32,7 +32,7 @@ pub struct NamedTensorRef<'a> {
 /// Name is set once at startup from model_schema.outputs. Data is
 /// pre-allocated to the expected output shape. The backend writes into
 /// this buffer each request via assign(), with no heap allocation.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct OutputBuffer {
     /// Name of this output tensor, set once at startup.
     pub name: ArrayString<MAX_TENSOR_NAME_LEN>,

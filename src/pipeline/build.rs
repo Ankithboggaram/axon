@@ -23,91 +23,19 @@ use crate::pipeline::stages::postprocess::PostprocessStage;
 use crate::pipeline::stages::validate::ValidateStage;
 use crate::types::{MAX_TENSOR_NAME_LEN, OutputBuffer};
 
-/// Routes metric handle creation or reuse through a single call site in `wrap`.
-///
-/// `Creating` collects new `StageMetrics` into the vec for Prometheus registration.
-/// `Reusing` draws from an existing slice so pool pipelines share the same handles.
-struct MetricsBridge<'a> {
-    new_metrics: &'a mut Vec<Arc<StageMetrics>>,
-    existing: Option<(&'a [Arc<StageMetrics>], usize)>,
-}
-
-impl<'a> MetricsBridge<'a> {
-    fn creating(new_metrics: &'a mut Vec<Arc<StageMetrics>>) -> Self {
-        Self {
-            new_metrics,
-            existing: None,
-        }
-    }
-
-    fn reusing(
-        new_metrics: &'a mut Vec<Arc<StageMetrics>>,
-        existing: &'a [Arc<StageMetrics>],
-    ) -> Self {
-        Self {
-            new_metrics,
-            existing: Some((existing, 0)),
-        }
-    }
-
-    /// Returns a metric handle for a timed stage, creating or reusing as appropriate.
-    fn get(&mut self, label: &'static str, timed: bool) -> Option<Arc<StageMetrics>> {
-        if !timed {
-            return None;
-        }
-        match &mut self.existing {
-            None => {
-                let m = StageMetrics::new(label);
-                self.new_metrics.push(Arc::clone(&m));
-                Some(m)
-            }
-            Some((slice, idx)) => {
-                let m = Arc::clone(&slice[*idx]);
-                *idx += 1;
-                Some(m)
-            }
-        }
-    }
-}
-
 /// Constructs a ready-to-run pipeline and its stage metrics from config.
 ///
 /// Returns the pipeline and a vec of metrics handles in stage order, one per
-/// stage that has `timed = true`. Pass the handles to `Metrics::new` so
+/// stage that has `timed = true`. Register the handles with `Metrics::new` so
 /// Prometheus can pull snapshots on each scrape.
 pub fn build(
     config: &Config,
     backend: Arc<dyn Backend>,
 ) -> anyhow::Result<(Pipeline<InferenceScratchpad>, Vec<Arc<StageMetrics>>)> {
     validate_ordering(&config.pipeline.stages)?;
-    let mut stage_metrics = Vec::new();
-    let mut bridge = MetricsBridge::creating(&mut stage_metrics);
-    let pipeline = build_pipeline(config, backend, &mut bridge)?;
-    Ok((pipeline, stage_metrics))
-}
 
-/// Constructs an additional pipeline that shares the given stage metrics handles.
-///
-/// Used by the pipeline pool factory so all pool pipelines write to the same
-/// Prometheus metrics rather than creating isolated, unregistered handles.
-pub fn build_with_metrics(
-    config: &Config,
-    backend: Arc<dyn Backend>,
-    existing_metrics: &[Arc<StageMetrics>],
-) -> anyhow::Result<Pipeline<InferenceScratchpad>> {
-    let mut dummy = Vec::new();
-    let mut bridge = MetricsBridge::reusing(&mut dummy, existing_metrics);
-    build_pipeline(config, backend, &mut bridge)
-}
-
-/// Shared pipeline construction logic used by both `build` and `build_with_metrics`.
-fn build_pipeline(
-    config: &Config,
-    backend: Arc<dyn Backend>,
-    bridge: &mut MetricsBridge<'_>,
-) -> anyhow::Result<Pipeline<InferenceScratchpad>> {
-    let scratchpad = build_scratchpad(config)?;
-    let mut pipeline = Pipeline::new(scratchpad);
+    let mut pipeline = Pipeline::new();
+    let mut stage_metrics: Vec<Arc<StageMetrics>> = Vec::new();
 
     for stage_config in &config.pipeline.stages {
         match stage_config {
@@ -134,7 +62,11 @@ fn build_pipeline(
                 let stage = ValidateStage {
                     expected_shape: shape,
                 };
-                pipeline.push_boxed(wrap(Box::new(stage), observability, "validate", bridge));
+                let (boxed, m) = wrap(Box::new(stage), observability);
+                pipeline.push_boxed(boxed);
+                if let Some(m) = m {
+                    stage_metrics.push(m);
+                }
             }
 
             StageConfig::Normalize {
@@ -146,7 +78,11 @@ fn build_pipeline(
                     mean: *mean,
                     inv_std: 1.0 / std,
                 };
-                pipeline.push_boxed(wrap(Box::new(stage), observability, "normalize", bridge));
+                let (boxed, m) = wrap(Box::new(stage), observability);
+                pipeline.push_boxed(boxed);
+                if let Some(m) = m {
+                    stage_metrics.push(m);
+                }
             }
 
             StageConfig::Clip {
@@ -161,7 +97,11 @@ fn build_pipeline(
                     min: *min,
                     max: *max,
                 };
-                pipeline.push_boxed(wrap(Box::new(stage), observability, "clip", bridge));
+                let (boxed, m) = wrap(Box::new(stage), observability);
+                pipeline.push_boxed(boxed);
+                if let Some(m) = m {
+                    stage_metrics.push(m);
+                }
             }
 
             StageConfig::Impute {
@@ -171,7 +111,11 @@ fn build_pipeline(
                 let stage = ImputeStage {
                     default_value: *default_value,
                 };
-                pipeline.push_boxed(wrap(Box::new(stage), observability, "impute", bridge));
+                let (boxed, m) = wrap(Box::new(stage), observability);
+                pipeline.push_boxed(boxed);
+                if let Some(m) = m {
+                    stage_metrics.push(m);
+                }
             }
 
             StageConfig::Infer { observability } => {
@@ -189,7 +133,11 @@ fn build_pipeline(
                     backend: Arc::clone(&backend),
                     input_name,
                 };
-                pipeline.push_boxed(wrap(Box::new(stage), observability, "infer", bridge));
+                let (boxed, m) = wrap(Box::new(stage), observability);
+                pipeline.push_boxed(boxed);
+                if let Some(m) = m {
+                    stage_metrics.push(m);
+                }
             }
 
             StageConfig::Postprocess {
@@ -201,16 +149,20 @@ fn build_pipeline(
                     threshold: *threshold,
                     output_type: *output_type,
                 };
-                pipeline.push_boxed(wrap(Box::new(stage), observability, "postprocess", bridge));
+                let (boxed, m) = wrap(Box::new(stage), observability);
+                pipeline.push_boxed(boxed);
+                if let Some(m) = m {
+                    stage_metrics.push(m);
+                }
             }
         }
     }
 
-    Ok(pipeline)
+    Ok((pipeline, stage_metrics))
 }
 
-/// Pre-allocates the scratchpad from the model schema.
-fn build_scratchpad(config: &Config) -> anyhow::Result<InferenceScratchpad> {
+/// Pre-allocates a scratchpad from the model schema for use in a scratchpad pool.
+pub fn build_scratchpad(config: &Config) -> anyhow::Result<InferenceScratchpad> {
     let input_shape: Vec<usize> = config.model_schema.inputs[0]
         .shape
         .iter()
@@ -287,20 +239,21 @@ fn validate_ordering(stages: &[StageConfig]) -> anyhow::Result<()> {
 ///
 /// Wrapping order: Retry -> Instrumented -> Deadline -> Timed.
 /// Timed is outermost so it measures total latency including all inner wrappers.
-/// Deadline is inside Timed so deadline breaches are captured in the latency histogram.
+/// Returns the wrapped stage and its metrics handle if `timed = true`.
 fn wrap(
     stage: Box<dyn Stage<InferenceScratchpad>>,
     obs: &StageObservability,
-    label: &'static str,
-    bridge: &mut MetricsBridge<'_>,
-) -> Box<dyn Stage<InferenceScratchpad>> {
+) -> (
+    Box<dyn Stage<InferenceScratchpad>>,
+    Option<Arc<StageMetrics>>,
+) {
     let stage: Box<dyn Stage<InferenceScratchpad>> = match obs.retries {
         Some(r) => Box::new(Retry::new(stage, r)),
         None => stage,
     };
 
     let stage: Box<dyn Stage<InferenceScratchpad>> = if obs.instrumented.unwrap_or(false) {
-        Box::new(Instrumented::new(stage, label))
+        Box::new(Instrumented::new(stage))
     } else {
         stage
     };
@@ -310,8 +263,10 @@ fn wrap(
         None => stage,
     };
 
-    match bridge.get(label, obs.timed.unwrap_or(false)) {
-        Some(m) => Box::new(Timed::new(stage, m)),
-        None => stage,
+    if obs.timed.unwrap_or(false) {
+        let (timed, metrics) = Timed::new(stage);
+        (Box::new(timed), Some(metrics))
+    } else {
+        (stage, None)
     }
 }

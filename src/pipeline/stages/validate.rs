@@ -26,18 +26,24 @@ fn non_finite_err(val: f32) -> PipelineError {
     } else {
         "validate: input contains infinite value"
     };
-    PipelineError::StageFailed(msg.into())
+    PipelineError::StageFailed {
+        stage: "ValidateStage",
+        message: msg.into(),
+    }
 }
 
 impl Stage<InferenceScratchpad> for ValidateStage {
     #[inline]
     fn run(&mut self, ctx: &mut InferenceScratchpad) -> Result<(), PipelineError> {
         if ctx.input.shape() != self.expected_shape.as_ref() {
-            return Err(PipelineError::StageFailed(format!(
-                "validate: expected shape {:?}, got {:?}",
-                self.expected_shape,
-                ctx.input.shape(),
-            )));
+            return Err(PipelineError::StageFailed {
+                stage: "ValidateStage",
+                message: format!(
+                    "validate: expected shape {:?}, got {:?}",
+                    self.expected_shape,
+                    ctx.input.shape(),
+                ),
+            });
         }
 
         // is_finite() is one CPU instruction covering both NaN and infinite.

@@ -27,7 +27,7 @@ pub struct Metrics {
     /// Total feature store lookups that returned no entry for the entity.
     pub store_misses_total: Counter,
 
-    // Per-stage snapshots pulled from pipex StageMetrics on each scrape.
+    // Per-stage latency and error rate snapshots, refreshed on each scrape.
     stage_p99_ns: GaugeVec,
     stage_p999_ns: GaugeVec,
     stage_count_total: GaugeVec,
@@ -142,7 +142,7 @@ impl Metrics {
 
     /// Renders all metrics in Prometheus text format.
     ///
-    /// Refreshes stage gauge values from the current pipex snapshots immediately
+    /// Refreshes stage gauge values from the latest per-stage snapshots immediately
     /// before encoding, so Prometheus always receives up-to-date values without
     /// requiring a background task.
     pub fn render(&self) -> anyhow::Result<String> {
@@ -153,7 +153,7 @@ impl Metrics {
             .map_err(|e| anyhow::anyhow!("failed to encode metrics: {e}"))
     }
 
-    /// Pulls the latest snapshot from each pipex StageMetrics and updates gauges.
+    /// Pulls the latest snapshot from each stage metrics handle and updates gauges.
     fn refresh_stage_snapshots(&self) {
         for sm in &self.stage_handles {
             let snap = sm.snapshot();

@@ -99,13 +99,13 @@ pub struct ModelSchemaConfig {
 /// Per-stage observability options.
 #[derive(Clone, Debug, Deserialize)]
 pub struct StageObservability {
-    /// Wraps the stage with pipex::metrics::Timed to record p99/p999 latency.
+    /// Records p99/p999 execution latency for this stage.
     pub timed: Option<bool>,
-    /// Wraps the stage with pipex::instrument::Instrumented to emit tracing spans.
+    /// Emits a tracing span on every execution of this stage.
     pub instrumented: Option<bool>,
-    /// Wraps the stage with pipex::retry::Retry. Value is the number of retries.
+    /// Retries the stage on failure up to this many total attempts.
     pub retries: Option<u32>,
-    /// Wraps the stage with pipex::deadline::Deadline. Value is the budget in milliseconds.
+    /// Fails the stage if execution exceeds this budget, in milliseconds.
     pub deadline_ms: Option<u64>,
 }
 

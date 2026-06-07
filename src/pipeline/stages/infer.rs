@@ -36,7 +36,10 @@ impl Stage<InferenceScratchpad> for InferStage {
             tokio::runtime::Handle::current()
                 .block_on(async { self.backend.run(&inputs, &mut ctx.outputs).await })
         })
-        .map_err(|e| PipelineError::StageFailed(e.to_string()))?;
+        .map_err(|e| PipelineError::StageFailed {
+            stage: "InferStage",
+            message: e.to_string(),
+        })?;
 
         Ok(())
     }

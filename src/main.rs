@@ -24,7 +24,8 @@ use crate::backend::onnx::OnnxBackend;
 use crate::backend::packaging::generate_triton_config;
 use crate::config::{BackendType, Config, RegistryType, StoreType};
 use crate::metrics::Metrics;
-use crate::pipeline::build::{build, build_with_metrics};
+use crate::pipeline::build::{build, build_scratchpad};
+use crate::pipeline::pool::PipelinePool;
 use crate::proto::inference_service_server::InferenceServiceServer;
 use crate::registry::ModelRegistryClient;
 use crate::registry::mlflow::MlflowClient;
@@ -32,9 +33,7 @@ use crate::server::InferenceServer;
 use crate::store::FeatureStore;
 use crate::store::redis::RedisStore;
 
-use crate::pipeline::InferenceScratchpad;
-use pipex::dynamic_pipeline::Pipeline;
-use pipex::pool::PipelinePool;
+use pipex::pool::ScratchpadPool;
 
 #[derive(Parser)]
 #[command(name = "axon", about = "A configurable real-time ML inference engine")]
@@ -160,7 +159,7 @@ async fn main() -> anyhow::Result<()> {
 
             let (first_pipeline, stage_metrics) = build(&config, Arc::clone(&backend))?;
 
-            let metrics = Arc::new(Metrics::new(stage_metrics.clone())?);
+            let metrics = Arc::new(Metrics::new(stage_metrics)?);
 
             let metrics_port = config.metrics.port;
             tokio::spawn(serve_metrics(Arc::clone(&metrics), metrics_port));
@@ -178,27 +177,25 @@ async fn main() -> anyhow::Result<()> {
                     .unwrap_or(4)
             });
 
-            let config_f = config.clone();
-            let backend_f = Arc::clone(&backend);
-            let metrics_f = stage_metrics.clone();
-            let pool: PipelinePool<Pipeline<InferenceScratchpad>> =
-                PipelinePool::new(pool_size, move || {
-                    build_with_metrics(&config_f, Arc::clone(&backend_f), &metrics_f)
-                        .expect("pool factory: failed to build pipeline")
-                });
+            // Scratchpad pool: pre-allocated tensor buffers, one per concurrent request.
+            // ScratchpadPool pre-populates to capacity and resets on return, so no
+            // allocation occurs on the hot path.
+            let config_s = config.clone();
+            let scratchpad_pool = Arc::new(ScratchpadPool::new(pool_size, move || {
+                build_scratchpad(&config_s).expect("scratchpad pool factory failed")
+            }));
 
-            // Pre-warm: acquire pool_size guards to trigger factory creation upfront,
-            // then drop them so all pipelines are returned to the pool before serving.
-            {
-                let guards: Vec<_> = (0..pool_size.saturating_sub(1))
-                    .map(|_| pool.acquire())
-                    .collect();
-                drop(guards);
-            }
-            // first_pipeline slots into the pool as the initial entry.
-            drop(first_pipeline);
+            // Pipeline pool: one pipeline per concurrent request slot.
+            // first_pipeline carries the registered StageMetrics so Prometheus sees
+            // real traffic. Additional slots carry unregistered handles.
+            let config_p = config.clone();
+            let backend_p = Arc::clone(&backend);
+            let pipeline_pool = Arc::new(PipelinePool::new(first_pipeline, pool_size, move || {
+                build(&config_p, Arc::clone(&backend_p))
+                    .expect("pipeline pool factory failed")
+                    .0
+            }));
 
-            let pool = Arc::new(pool);
             info!(pool_size, "pipeline pool ready");
 
             let (mut health_reporter, health_service) = tonic_health::server::health_reporter();
@@ -208,7 +205,8 @@ async fn main() -> anyhow::Result<()> {
 
             let inference_server = InferenceServer::new(
                 store,
-                Arc::clone(&pool),
+                pipeline_pool,
+                scratchpad_pool,
                 metrics,
                 config.grpc.stream_poll_interval_ms,
             );

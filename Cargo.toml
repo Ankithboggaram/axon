@@ -13,7 +13,7 @@ panic = "abort"     # removes stack unwinding machinery; smaller binary, no unwi
 [dependencies]
 
 # --- pipeline ---
-pipex = { git = "https://github.com/Ankithboggaram/pipex" }
+pipex = { path = "../pipex" }
 ndarray = "0.17"
 
 # --- inference backend ---
@@ -23,6 +23,9 @@ ort = { version = "2.0.0-rc.12", features = ["download-binaries", "ndarray"] }
 # ArrayString<N> replaces String for hot-path fields where max length is known,
 # eliminating heap allocation and reallocation risk entirely.
 arrayvec = "0.7"
+
+# --- sync primitives ---
+parking_lot = "0.12"
 
 # --- async runtime ---
 tokio        = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }

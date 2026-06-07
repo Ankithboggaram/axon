@@ -7,6 +7,7 @@ use pipex::scratchpad::Scratchpad;
 use crate::types::OutputBuffer;
 
 pub mod build;
+pub mod pool;
 pub mod stages;
 
 /// Maximum byte length for entity_id and request_id.
@@ -15,7 +16,7 @@ pub mod stages;
 /// with room to spare. The server layer rejects IDs that exceed this limit.
 pub const MAX_ID_LEN: usize = 128;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct InferenceScratchpad {
     /// Entity identifier, stack-allocated to avoid heap allocation on the hot path.
     pub entity_id: ArrayString<MAX_ID_LEN>,
@@ -41,9 +42,5 @@ impl Scratchpad for InferenceScratchpad {
         for out in self.outputs.iter_mut() {
             out.data.fill(0.0);
         }
-    }
-
-    fn validate(&self) -> bool {
-        !self.entity_id.is_empty() && !self.input.is_empty()
     }
 }

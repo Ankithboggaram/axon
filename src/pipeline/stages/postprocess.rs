@@ -21,9 +21,10 @@ impl Stage<InferenceScratchpad> for PostprocessStage {
     #[inline]
     fn run(&mut self, ctx: &mut InferenceScratchpad) -> Result<(), PipelineError> {
         if ctx.outputs.is_empty() {
-            return Err(PipelineError::StageFailed(
-                "postprocess: no outputs from infer stage".into(),
-            ));
+            return Err(PipelineError::StageFailed {
+                stage: "PostprocessStage",
+                message: "postprocess: no outputs from infer stage".into(),
+            });
         }
 
         let output = &mut ctx.outputs[0];
@@ -32,10 +33,13 @@ impl Stage<InferenceScratchpad> for PostprocessStage {
             OutputType::Binary => {
                 // Binary thresholding is only meaningful for scalar outputs.
                 if output.data.len() != 1 {
-                    return Err(PipelineError::StageFailed(format!(
-                        "postprocess: binary output type requires a scalar output, got shape {:?}",
-                        output.data.shape()
-                    )));
+                    return Err(PipelineError::StageFailed {
+                        stage: "PostprocessStage",
+                        message: format!(
+                            "postprocess: binary output type requires a scalar output, got shape {:?}",
+                            output.data.shape()
+                        ),
+                    });
                 }
                 output
                     .data

@@ -4,15 +4,14 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use pipex::dynamic_pipeline::Pipeline;
-use pipex::pool::PipelinePool;
-use pipex::scratchpad::Scratchpad;
+use pipex::pool::ScratchpadPool;
 use tokio_stream::Stream;
 use tonic::{Request, Response, Status};
 use tracing::{error, info, info_span, warn};
 
 use crate::metrics::Metrics;
 use crate::pipeline::InferenceScratchpad;
+use crate::pipeline::pool::PipelinePool;
 use crate::proto::{
     OutputTensor, PredictRequest, PredictResponse, PredictStreamRequest, PredictStreamResponse,
     inference_service_server::InferenceService,
@@ -26,7 +25,8 @@ use crate::store::{FeatureStore, FetchResult};
 #[derive(Clone)]
 pub struct InferenceServer {
     store: Arc<dyn FeatureStore>,
-    pool: Arc<PipelinePool<Pipeline<InferenceScratchpad>>>,
+    pipeline_pool: Arc<PipelinePool>,
+    scratchpad_pool: Arc<ScratchpadPool<InferenceScratchpad>>,
     metrics: Arc<Metrics>,
     stream_poll_interval: Duration,
 }
@@ -34,13 +34,15 @@ pub struct InferenceServer {
 impl InferenceServer {
     pub fn new(
         store: Arc<dyn FeatureStore>,
-        pool: Arc<PipelinePool<Pipeline<InferenceScratchpad>>>,
+        pipeline_pool: Arc<PipelinePool>,
+        scratchpad_pool: Arc<ScratchpadPool<InferenceScratchpad>>,
         metrics: Arc<Metrics>,
         stream_poll_interval_ms: u64,
     ) -> Self {
         Self {
             store,
-            pool,
+            pipeline_pool,
+            scratchpad_pool,
             metrics,
             stream_poll_interval: Duration::from_millis(stream_poll_interval_ms),
         }
@@ -55,25 +57,23 @@ impl InferenceServer {
         entity_id: &str,
         inline_features: &[f32],
     ) -> Result<PredictResponse, Status> {
-        let mut pipeline = self.pool.acquire();
+        // Acquire a pre-allocated scratchpad. The pool resets it on return, so
+        // all tensor buffers are already zeroed and metadata fields are cleared.
+        let mut ctx = self.scratchpad_pool.acquire();
 
-        {
-            let ctx = pipeline.context_mut();
-            ctx.reset();
-            ctx.entity_id
-                .try_push_str(entity_id)
-                .map_err(|_| Status::invalid_argument("entity_id exceeds maximum length"))?;
-            ctx.timestamp_ms = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as i64;
-        }
+        ctx.entity_id
+            .try_push_str(entity_id)
+            .map_err(|_| Status::invalid_argument("entity_id exceeds maximum length"))?;
+        ctx.timestamp_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
 
         if inline_features.is_empty() {
             let fetch_start = Instant::now();
             let result = self
                 .store
-                .fetch_features(entity_id, &mut pipeline.context_mut().input)
+                .fetch_features(entity_id, &mut ctx.input)
                 .await
                 .map_err(|e| {
                     error!(entity_id, error = %e, "feature store error");
@@ -92,7 +92,6 @@ impl InferenceServer {
                 );
             }
         } else {
-            let ctx = pipeline.context_mut();
             if inline_features.len() != ctx.input.len() {
                 return Err(Status::invalid_argument(format!(
                     "expected {} features, got {}",
@@ -106,12 +105,12 @@ impl InferenceServer {
                 .copy_from_slice(inline_features);
         }
 
-        pipeline.run().map_err(|e| {
+        // Acquire a pipeline, run it against the scratchpad, return it to pool on drop.
+        self.pipeline_pool.acquire().run(&mut *ctx).map_err(|e| {
             error!(entity_id, error = %e, "pipeline error");
             Status::internal(format!("pipeline error: {e}"))
         })?;
 
-        let ctx = pipeline.context();
         let outputs = ctx
             .outputs
             .iter()

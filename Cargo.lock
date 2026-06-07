@@ -140,6 +140,7 @@ dependencies = [
  "futures-util",
  "ndarray",
  "ort",
+ "parking_lot",
  "pipex",
  "prometheus",
  "prost",
@@ -1297,9 +1298,9 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pipex"
-version = "0.1.0"
-source = "git+https://github.com/Ankithboggaram/pipex#a7de8d2242bc73efbaddb9021b07f591efaa3711"
+version = "0.2.0"
 dependencies = [
+ "parking_lot",
  "tracing",
 ]
 
