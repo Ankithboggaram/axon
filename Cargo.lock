@@ -1299,6 +1299,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 [[package]]
 name = "pipex"
 version = "0.2.0"
+source = "git+https://github.com/Ankithboggaram/pipex.git?tag=v0.2.0#7566ebb87f77d27e403801b072021783cc7f6efd"
 dependencies = [
  "parking_lot",
  "tracing",

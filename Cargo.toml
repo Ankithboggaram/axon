@@ -13,7 +13,7 @@ panic = "abort"     # removes stack unwinding machinery; smaller binary, no unwi
 [dependencies]
 
 # --- pipeline ---
-pipex = { path = "../pipex" }
+pipex = { git = "https://github.com/Ankithboggaram/pipex.git", tag = "v0.2.0" }
 ndarray = "0.17"
 
 # --- inference backend ---
