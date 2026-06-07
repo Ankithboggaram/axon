@@ -187,7 +187,26 @@ impl ConfigSeed {
 
 #[async_trait]
 pub trait ModelRegistryClient: std::fmt::Debug + Send + Sync {
-    /// Fetches the model artifact and returns its local path and metadata.
+    /// Fetches the model artifact and downloads it to a local path.
+    ///
+    /// # Implementors
+    ///
+    /// **Thread safety:** may be called concurrently from multiple async tasks;
+    /// `&self` must be safe to share across task boundaries.
+    ///
+    /// **Output contract:** on success, [`RegisteredModel::local_path`] must
+    /// point to an existing, readable ONNX file. The file must remain stable
+    /// for the lifetime of the process; the caller does not re-fetch between
+    /// requests.
+    ///
+    /// **Error contract:** return [`crate::error::RegistryError::ModelNotFound`]
+    /// if the (name, version) pair does not exist,
+    /// [`crate::error::RegistryError::Request`] for network failures, or
+    /// [`crate::error::RegistryError::Io`] if writing the artifact to disk
+    /// fails.
+    ///
+    /// **Idempotency:** safe to call multiple times with the same arguments.
+    /// Re-downloading may overwrite the local file with identical content.
     async fn fetch_model(
         &self,
         name: &str,

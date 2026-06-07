@@ -33,6 +33,26 @@ pub mod packaging;
 pub trait Backend: std::fmt::Debug + Send + Sync {
     /// Runs model inference on the given named input tensors and writes
     /// results into the pre-allocated output buffers in place.
+    ///
+    /// # Implementors
+    ///
+    /// **Thread safety:** `run` takes `&self` so multiple pipeline slots call it
+    /// concurrently. Any internal mutable state (session handles, scratch
+    /// buffers) must be protected by the implementor.
+    ///
+    /// **Output contract:** on success, every buffer in `outputs` must be fully
+    /// overwritten with the model's predictions. Element count and shape must
+    /// match the model schema declared in config. The caller does not zero
+    /// `outputs` between requests.
+    ///
+    /// **Error contract:** return [`crate::error::BackendError::InferenceFailed`]
+    /// for runtime errors, [`crate::error::BackendError::ShapeMismatch`] or
+    /// [`crate::error::BackendError::OutputCountMismatch`] for schema violations.
+    /// On any error, the contents of `outputs` are unspecified; the caller
+    /// discards the scratchpad.
+    ///
+    /// **Idempotency:** the same `inputs` must always produce the same `outputs`.
+    /// Backends must not accumulate state across calls.
     async fn run(
         &self,
         inputs: &[NamedTensorRef<'_>],

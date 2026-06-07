@@ -43,6 +43,16 @@ pub enum FetchResult {
 pub trait FeatureStore: std::fmt::Debug + Send + Sync {
     /// Checks that the store is reachable. Called once at startup before
     /// the gRPC health check is set to Serving.
+    ///
+    /// # Implementors
+    ///
+    /// **Thread safety:** `&self`; concurrent pings are safe and must not
+    /// block other store operations.
+    ///
+    /// **Error contract:** return [`crate::error::StoreError::Connection`] if
+    /// the store cannot be reached. Must not modify any store data.
+    ///
+    /// **Idempotency:** fully idempotent; safe to call any number of times.
     async fn ping(&self) -> Result<(), StoreError>;
 
     /// Fetches features for the given entity and writes them into `dest`.
@@ -50,6 +60,24 @@ pub trait FeatureStore: std::fmt::Debug + Send + Sync {
     /// Writes directly into the pre-allocated scratchpad buffer to avoid any
     /// intermediate allocation. Returns `Miss` without modifying `dest` if no
     /// entry exists for the entity.
+    ///
+    /// # Implementors
+    ///
+    /// **Thread safety:** called concurrently for different entity IDs. Must not
+    /// hold a lock that would serialize callers against one another.
+    ///
+    /// **Output contract:** on [`FetchResult::Hit`], `dest` must be fully
+    /// overwritten with the stored feature vector and element count must equal
+    /// `dest.len()`. On [`FetchResult::Miss`], `dest` must be left unmodified.
+    ///
+    /// **Error contract:** return [`crate::error::StoreError::Connection`] for
+    /// network failures, [`crate::error::StoreError::Deserialize`] for corrupt
+    /// payloads, or [`crate::error::StoreError::ShapeMismatch`] for a stored
+    /// vector that does not fit `dest`. On any error, the contents of `dest`
+    /// are unspecified.
+    ///
+    /// **Idempotency:** the same `entity_id` returns the same result on every
+    /// call. No side effects on the store.
     async fn fetch_features(
         &self,
         entity_id: &str,
