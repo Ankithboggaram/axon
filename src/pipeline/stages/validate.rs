@@ -57,3 +57,77 @@ impl Stage<InferenceScratchpad> for ValidateStage {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use arrayvec::ArrayString;
+    use ndarray::arr1;
+    use pipex::stage::Stage;
+
+    use super::*;
+    use crate::pipeline::InferenceScratchpad;
+
+    fn ctx(input: ndarray::ArrayD<f32>) -> InferenceScratchpad {
+        InferenceScratchpad {
+            entity_id: ArrayString::new(),
+            request_id: ArrayString::new(),
+            timestamp_ms: 0,
+            input,
+            outputs: Box::new([]),
+        }
+    }
+
+    #[test]
+    fn correct_shape_passes() {
+        let mut stage = ValidateStage {
+            expected_shape: Box::new([3]),
+        };
+        let mut ctx = ctx(arr1(&[1.0f32, 2.0, 3.0]).into_dyn());
+        assert!(stage.run(&mut ctx).is_ok());
+    }
+
+    #[test]
+    fn wrong_shape_fails() {
+        let mut stage = ValidateStage {
+            expected_shape: Box::new([4]),
+        };
+        let mut ctx = ctx(arr1(&[1.0f32, 2.0, 3.0]).into_dyn());
+        assert!(stage.run(&mut ctx).is_err());
+    }
+
+    #[test]
+    fn nan_fails() {
+        let mut stage = ValidateStage {
+            expected_shape: Box::new([2]),
+        };
+        let mut ctx = ctx(arr1(&[1.0f32, f32::NAN]).into_dyn());
+        assert!(stage.run(&mut ctx).is_err());
+    }
+
+    #[test]
+    fn infinite_fails() {
+        let mut stage = ValidateStage {
+            expected_shape: Box::new([1]),
+        };
+        let mut ctx = ctx(arr1(&[f32::INFINITY]).into_dyn());
+        assert!(stage.run(&mut ctx).is_err());
+    }
+
+    #[test]
+    fn neg_infinite_fails() {
+        let mut stage = ValidateStage {
+            expected_shape: Box::new([1]),
+        };
+        let mut ctx = ctx(arr1(&[f32::NEG_INFINITY]).into_dyn());
+        assert!(stage.run(&mut ctx).is_err());
+    }
+
+    #[test]
+    fn all_finite_passes() {
+        let mut stage = ValidateStage {
+            expected_shape: Box::new([4]),
+        };
+        let mut ctx = ctx(arr1(&[-1.0f32, 0.0, 0.5, 1e6]).into_dyn());
+        assert!(stage.run(&mut ctx).is_ok());
+    }
+}

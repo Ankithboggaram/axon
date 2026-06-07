@@ -22,3 +22,61 @@ impl Stage<InferenceScratchpad> for ImputeStage {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use arrayvec::ArrayString;
+    use ndarray::arr1;
+    use pipex::stage::Stage;
+
+    use super::*;
+    use crate::pipeline::InferenceScratchpad;
+
+    fn ctx(input: ndarray::ArrayD<f32>) -> InferenceScratchpad {
+        InferenceScratchpad {
+            entity_id: ArrayString::new(),
+            request_id: ArrayString::new(),
+            timestamp_ms: 0,
+            input,
+            outputs: Box::new([]),
+        }
+    }
+
+    #[test]
+    fn non_nan_values_unchanged() {
+        let mut stage = ImputeStage { default_value: 0.0 };
+        let mut ctx = ctx(arr1(&[1.0f32, 2.0, 3.0]).into_dyn());
+        stage.run(&mut ctx).unwrap();
+        assert_eq!(ctx.input.as_slice().unwrap(), &[1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn nan_replaced_with_default() {
+        let mut stage = ImputeStage {
+            default_value: -1.0,
+        };
+        let mut ctx = ctx(arr1(&[f32::NAN]).into_dyn());
+        stage.run(&mut ctx).unwrap();
+        assert_eq!(ctx.input[[0]], -1.0);
+    }
+
+    #[test]
+    fn only_nan_values_replaced() {
+        let mut stage = ImputeStage {
+            default_value: 99.0,
+        };
+        let mut ctx = ctx(arr1(&[1.0f32, f32::NAN, 3.0]).into_dyn());
+        stage.run(&mut ctx).unwrap();
+        let s = ctx.input.as_slice().unwrap();
+        assert_eq!(s[0], 1.0);
+        assert_eq!(s[1], 99.0);
+        assert_eq!(s[2], 3.0);
+    }
+
+    #[test]
+    fn always_returns_ok() {
+        let mut stage = ImputeStage { default_value: 0.0 };
+        let mut ctx = ctx(arr1(&[f32::NAN, f32::NAN]).into_dyn());
+        assert!(stage.run(&mut ctx).is_ok());
+    }
+}
