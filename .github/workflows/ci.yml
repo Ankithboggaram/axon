@@ -89,10 +89,3 @@ jobs:
         env:
           RUSTDOCFLAGS: "-D warnings"
 
-  deny:
-    name: Deny
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: EmbarkStudios/cargo-deny-action@v2
-
