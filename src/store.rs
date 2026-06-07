@@ -1,4 +1,24 @@
-//! FeatureStore trait and feature store implementations.
+//! Feature store trait and implementations.
+//!
+//! A [`FeatureStore`] retrieves pre-computed feature vectors for a given entity
+//! and writes them directly into the inference scratchpad buffer. The
+//! write-in-place contract means no allocation occurs on the request hot path.
+//!
+//! ## FetchResult contract
+//!
+//! [`FeatureStore::fetch_features`] returns a [`FetchResult`] to distinguish
+//! two outcomes:
+//!
+//! - [`FetchResult::Hit`]: features were found and written into `dest` in
+//!   full. The buffer is ready for the next pipeline stage.
+//! - [`FetchResult::Miss`]: no entry exists for the entity. `dest` is left
+//!   unchanged (zeroed from scratchpad initialisation). The `impute` stage
+//!   handles this case; callers must not treat a zeroed buffer as valid data
+//!   without an explicit imputation step in the pipeline.
+//!
+//! ## Implementations
+//!
+//! - [`redis::RedisStore`]: MessagePack-encoded vectors stored in Redis
 
 use async_trait::async_trait;
 use ndarray::ArrayD;

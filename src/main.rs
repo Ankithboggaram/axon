@@ -1,4 +1,19 @@
-//! Entry point. Wires everything together at startup.
+//! Entry point: wires together all subsystems and starts the gRPC server.
+//!
+//! ## Startup sequence
+//!
+//! 1. Parse CLI args and load `config.toml` via [`config::Config::load`]
+//! 2. Construct the model registry client and fetch the ONNX artifact
+//! 3. Initialise the inference backend ([`backend::onnx::OnnxBackend`])
+//! 4. Build the processing pipeline from config ([`pipeline::build::build`])
+//! 5. Register Prometheus metrics and spawn the metrics HTTP listener
+//! 6. Ping the feature store (health is NOT set to `SERVING` until this passes)
+//! 7. Pre-populate the scratchpad and pipeline pools
+//! 8. Bind the gRPC listener and set health to `SERVING`
+//!
+//! The ordering of steps 6 and 8 is intentional: the gRPC health check must not
+//! report `SERVING` until the feature store is confirmed reachable. A pod that
+//! reports healthy but cannot fetch features would silently fail every request.
 
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
@@ -246,7 +261,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Converts a [`crate::config::ConfigError`] into a structured CLI error message.
+/// Converts a [`crate::error::ConfigError`] into a structured CLI error message.
 ///
 /// Each variant gets a distinct format so the operator knows immediately whether
 /// the problem is a missing file, a TOML syntax error, or a bad value.

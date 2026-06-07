@@ -1,4 +1,19 @@
-//! gRPC server: unary and streaming RPC handlers.
+//! gRPC service implementation and the async/sync handoff.
+//!
+//! [`InferenceServer`] implements the generated `InferenceService` trait for
+//! both the unary (`Predict`) and server-streaming (`PredictStream`) RPCs.
+//!
+//! ## Async/sync boundary
+//!
+//! gRPC I/O runs on the tokio multi-thread runtime. The inference pipeline is
+//! synchronous: stages mutate a scratchpad in place with no await points. The
+//! two meet in [`InferenceServer::run_inference`], which calls
+//! `tokio::task::block_in_place` before entering the pipeline. This tells
+//! tokio the current thread is about to block, so the scheduler can move other
+//! tasks to different threads rather than stalling the executor.
+//!
+//! The pattern is: async shell, sync core. All network I/O is async; all
+//! computation is sync. The boundary is always in the same place.
 
 use std::pin::Pin;
 use std::sync::Arc;

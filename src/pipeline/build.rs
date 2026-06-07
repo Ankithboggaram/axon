@@ -1,4 +1,17 @@
-//! Wiring functions that construct the pipeline and scratchpad from config.
+//! Config-to-pipeline translation: the place where `config.toml` becomes a running pipeline.
+//!
+//! [`build`] is the single entry point. It reads a [`Config`] and produces a
+//! [`pipex::dynamic_pipeline::Pipeline`] with every stage wrapped in the
+//! observability decorators declared in config (timing, instrumentation,
+//! deadlines, retries).
+//!
+//! Stage order in the pipeline matches stage order in `config.toml` exactly.
+//! Reordering stages in config changes execution order; there is no implicit
+//! sorting or dependency resolution.
+//!
+//! [`build_scratchpad`] allocates a zeroed [`InferenceScratchpad`] sized to
+//! the model schema. It is called once per pool slot at startup, not per
+//! request.
 
 use std::sync::Arc;
 use std::time::Duration;
