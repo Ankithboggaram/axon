@@ -13,7 +13,9 @@ pub const MAX_TENSOR_NAME_LEN: usize = 64;
 /// OutputBuffer for outputs to avoid heap allocation.
 #[derive(Debug)]
 pub struct NamedTensor {
+    /// Tensor name as registered in the model schema.
     pub name: String,
+    /// Tensor values as a dynamic-shape array.
     pub data: ArrayD<f32>,
 }
 
@@ -23,7 +25,9 @@ pub struct NamedTensor {
 /// passing inputs to the backend requires zero heap allocation.
 #[derive(Debug)]
 pub struct NamedTensorRef<'a> {
+    /// Tensor name, borrowed from the scratchpad.
     pub name: &'a str,
+    /// Tensor values as a borrowed view into the scratchpad buffer.
     pub data: ArrayViewD<'a, f32>,
 }
 

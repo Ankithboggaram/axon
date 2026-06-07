@@ -47,6 +47,7 @@ pub struct InferenceServer {
 }
 
 impl InferenceServer {
+    /// Creates a new inference server wiring together all subsystems.
     pub fn new(
         store: Arc<dyn FeatureStore>,
         pipeline_pool: Arc<PipelinePool>,

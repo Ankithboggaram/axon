@@ -15,6 +15,7 @@ use crate::error::ServeError;
 /// Construct once at startup and share via `Arc<Metrics>`. The individual
 /// metric types are internally thread-safe, so no external locking required.
 pub struct Metrics {
+    /// Prometheus registry that all metrics are registered with.
     pub registry: Registry,
 
     /// Total inference requests, labelled by RPC name and outcome.

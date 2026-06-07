@@ -11,7 +11,9 @@ pub mod mlflow;
 /// A model artifact fetched from the registry.
 #[derive(Debug)]
 pub struct RegisteredModel {
+    /// Model name as registered in the registry.
     pub name: String,
+    /// Version string as returned by the registry.
     pub version: String,
     /// Local filesystem path to the downloaded ONNX artifact.
     pub local_path: String,
@@ -26,10 +28,15 @@ pub struct RegisteredModel {
 pub struct ConfigSeed {
     /// Input and output tensor specs, derived from the model signature if available.
     pub model_schema: Option<ModelSchemaConfig>,
+    /// Normalisation mean logged with the model, if available.
     pub mean: Option<f32>,
+    /// Normalisation standard deviation logged with the model, if available.
     pub std: Option<f32>,
+    /// Lower clip bound logged with the model, if available.
     pub clip_min: Option<f32>,
+    /// Upper clip bound logged with the model, if available.
     pub clip_max: Option<f32>,
+    /// Decision threshold logged with the model, if available.
     pub threshold: Option<f32>,
 }
 
@@ -185,6 +192,9 @@ impl ConfigSeed {
     }
 }
 
+/// Client for downloading model artifacts and metadata from a model registry.
+///
+/// Add new registry backends by implementing this trait; no other code needs to change.
 #[async_trait]
 pub trait ModelRegistryClient: std::fmt::Debug + Send + Sync {
     /// Fetches the model artifact and downloads it to a local path.

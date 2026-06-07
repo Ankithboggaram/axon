@@ -11,6 +11,7 @@ use crate::pipeline::InferenceScratchpad;
 /// as NaN through the rest of the pipeline.
 #[derive(Debug)]
 pub struct ImputeStage {
+    /// Value substituted for each NaN element.
     pub default_value: f32,
 }
 

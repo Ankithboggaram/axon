@@ -28,7 +28,12 @@ pub enum ConfigError {
     ///
     /// `field` identifies the offending config key; `reason` explains why.
     #[error("invalid config: {field}: {reason}")]
-    Invalid { field: &'static str, reason: String },
+    Invalid {
+        /// The config key that failed validation (e.g. "grpc.port").
+        field: &'static str,
+        /// Human-readable explanation of why the value is invalid.
+        reason: String,
+    },
 }
 
 /// Errors from an inference [`Backend`](crate::backend::Backend).
@@ -41,11 +46,21 @@ pub enum BackendError {
 
     /// The input tensor shape did not match what the model expects.
     #[error("input shape mismatch: expected {expected:?}, got {got:?}")]
-    ShapeMismatch { expected: Vec<i64>, got: Vec<i64> },
+    ShapeMismatch {
+        /// Shape the model was compiled for.
+        expected: Vec<i64>,
+        /// Shape supplied by the caller.
+        got: Vec<i64>,
+    },
 
     /// The model produced an unexpected number of outputs.
     #[error("output count mismatch: expected {expected}, got {got}")]
-    OutputCountMismatch { expected: usize, got: usize },
+    OutputCountMismatch {
+        /// Number of outputs the model produces.
+        expected: usize,
+        /// Number of output buffers the caller provided.
+        got: usize,
+    },
 
     /// The inference run itself failed.
     #[error("inference failed: {0}")]
@@ -62,17 +77,30 @@ pub enum StoreError {
 
     /// A feature fetch command failed.
     #[error("feature fetch failed for entity '{entity_id}': {reason}")]
-    Fetch { entity_id: String, reason: String },
+    Fetch {
+        /// Entity for which the fetch failed.
+        entity_id: String,
+        /// Underlying error from the store.
+        reason: String,
+    },
 
     /// The raw bytes returned by the store could not be deserialised.
     #[error("failed to deserialise features for entity '{entity_id}': {reason}")]
-    Deserialize { entity_id: String, reason: String },
+    Deserialize {
+        /// Entity whose features could not be deserialised.
+        entity_id: String,
+        /// Deserialisation error detail.
+        reason: String,
+    },
 
     /// The deserialised feature vector has the wrong shape for the pipeline.
     #[error("feature shape mismatch for entity '{entity_id}': expected {expected:?}, got {got:?}")]
     ShapeMismatch {
+        /// Entity whose feature vector had the wrong shape.
         entity_id: String,
+        /// Shape the pipeline expects for the input buffer.
         expected: Vec<usize>,
+        /// Shape of the vector returned by the store.
         got: Vec<usize>,
     },
 }
@@ -95,7 +123,10 @@ pub enum RegistryError {
 
     /// No version of the requested model exists in the registry.
     #[error("model '{name}' not found in registry")]
-    ModelNotFound { name: String },
+    ModelNotFound {
+        /// Name of the model that was not found.
+        name: String,
+    },
 
     /// A local file operation (temp dir, artifact write) failed.
     #[error("I/O error: {0}")]
@@ -108,7 +139,12 @@ pub enum RegistryError {
 pub enum ServeError {
     /// A Prometheus metric could not be registered.
     #[error("failed to register metric '{name}': {reason}")]
-    MetricsRegistration { name: &'static str, reason: String },
+    MetricsRegistration {
+        /// Name of the metric that could not be registered.
+        name: &'static str,
+        /// Underlying Prometheus error detail.
+        reason: String,
+    },
 
     /// The Prometheus metrics could not be encoded for the scrape endpoint.
     #[error("failed to encode metrics: {0}")]

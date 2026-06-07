@@ -16,12 +16,14 @@ pub mod stages;
 /// with room to spare. The server layer rejects IDs that exceed this limit.
 pub const MAX_ID_LEN: usize = 128;
 
+/// Per-request working state passed through every pipeline stage.
 #[derive(Clone, Debug)]
 pub struct InferenceScratchpad {
     /// Entity identifier, stack-allocated to avoid heap allocation on the hot path.
     pub entity_id: ArrayString<MAX_ID_LEN>,
     /// Request identifier, stack-allocated to avoid heap allocation on the hot path.
     pub request_id: ArrayString<MAX_ID_LEN>,
+    /// Unix timestamp in milliseconds when the request was received.
     pub timestamp_ms: i64,
     /// Input tensor, pre-allocated at startup to the shape from model_schema.inputs.
     pub input: ArrayD<f32>,

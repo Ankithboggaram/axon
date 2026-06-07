@@ -7,6 +7,7 @@ use ndarray::ArrayD;
 use crate::error::StoreError;
 use crate::store::{FeatureStore, FetchResult};
 
+/// Redis-backed feature store using a connection pool.
 pub struct RedisStore {
     pool: Pool,
     /// Key prefix applied to every entity lookup: `{prefix}:{entity_id}`.

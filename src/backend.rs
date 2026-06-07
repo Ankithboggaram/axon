@@ -29,6 +29,9 @@ use crate::types::{NamedTensorRef, OutputBuffer};
 pub mod onnx;
 pub mod packaging;
 
+/// Inference backend: accepts named input tensors and writes predictions into output buffers.
+///
+/// Add new runtimes by implementing this trait; no other code needs to change.
 #[async_trait]
 pub trait Backend: std::fmt::Debug + Send + Sync {
     /// Runs model inference on the given named input tensors and writes

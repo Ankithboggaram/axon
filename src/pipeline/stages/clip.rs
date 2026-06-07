@@ -11,7 +11,9 @@ use crate::pipeline::InferenceScratchpad;
 /// normalised values that would corrupt model predictions.
 #[derive(Debug)]
 pub struct ClipStage {
+    /// Lower bound; values below this are clamped to min.
     pub min: f32,
+    /// Upper bound; values above this are clamped to max.
     pub max: f32,
 }
 

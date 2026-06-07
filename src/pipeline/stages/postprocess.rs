@@ -13,7 +13,9 @@ use crate::pipeline::InferenceScratchpad;
 /// - `Raw`: passes the raw model output through unchanged
 #[derive(Debug)]
 pub struct PostprocessStage {
+    /// Decision boundary for binary classification.
     pub threshold: f32,
+    /// How to interpret and transform the raw model score.
     pub output_type: OutputType,
 }
 

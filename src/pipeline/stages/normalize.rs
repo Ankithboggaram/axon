@@ -13,6 +13,7 @@ use crate::pipeline::InferenceScratchpad;
 /// on modern CPUs. The wiring code computes `1.0 / std` once at startup.
 #[derive(Debug)]
 pub struct NormalizeStage {
+    /// Mean subtracted from each element before scaling.
     pub mean: f32,
     /// Reciprocal of std (1.0 / std), precomputed at wiring time.
     pub inv_std: f32,

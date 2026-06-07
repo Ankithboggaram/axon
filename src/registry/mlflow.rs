@@ -12,12 +12,14 @@ use crate::config::{ModelSchemaConfig, TensorSpec};
 use crate::error::RegistryError;
 use crate::registry::{ConfigSeed, ModelRegistryClient, RegisteredModel};
 
+/// HTTP client for the MLflow REST API.
 pub struct MlflowClient {
     tracking_uri: String,
     http: reqwest::Client,
 }
 
 impl MlflowClient {
+    /// Creates a new client pointing at the given MLflow tracking server URI.
     pub fn new(tracking_uri: &str) -> Result<Self, RegistryError> {
         let http = reqwest::Client::builder()
             .build()

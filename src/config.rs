@@ -4,6 +4,7 @@ use serde::Deserialize;
 
 use crate::error::ConfigError;
 
+/// Inference backend implementation.
 #[non_exhaustive]
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -14,17 +15,21 @@ pub enum BackendType {
     Triton,
 }
 
+/// Feature store backend.
 #[non_exhaustive]
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StoreType {
+    /// Redis feature store.
     Redis,
 }
 
+/// Model registry backend.
 #[non_exhaustive]
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RegistryType {
+    /// MLflow model registry.
     Mlflow,
 }
 
@@ -33,14 +38,20 @@ pub enum RegistryType {
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OutputType {
+    /// Thresholds the score to 1.0 (above threshold) or -1.0 (below threshold).
     Binary,
+    /// Passes the raw model score through unchanged.
     Probability,
+    /// Passes the raw model output through unchanged.
     Raw,
 }
 
+/// gRPC server settings.
 #[derive(Clone, Debug, Deserialize)]
 pub struct GrpcConfig {
+    /// Host address the gRPC server binds to.
     pub host: String,
+    /// Port the gRPC server listens on.
     pub port: u16,
     /// How often the streaming RPC polls the feature store for updated features, in milliseconds.
     pub stream_poll_interval_ms: u64,
@@ -52,8 +63,10 @@ pub struct GrpcConfig {
     pub pool_size: Option<usize>,
 }
 
+/// Inference backend settings.
 #[derive(Clone, Debug, Deserialize)]
 pub struct BackendConfig {
+    /// Which backend implementation to use.
     #[serde(rename = "type")]
     pub backend_type: BackendType,
     /// Model name registered in Triton. Required for the Triton backend only.
@@ -64,41 +77,56 @@ pub struct BackendConfig {
     pub port: Option<u16>,
 }
 
+/// Model registry connection settings.
 #[derive(Clone, Debug, Deserialize)]
 pub struct RegistryConfig {
+    /// Which registry implementation to use.
     #[serde(rename = "type")]
     pub registry_type: RegistryType,
+    /// Base URI of the registry server.
     pub uri: String,
+    /// Name of the model to fetch from the registry.
     pub model_name: String,
     /// Accepts a version number or "latest".
     pub model_version: String,
 }
 
+/// Feature store connection settings.
 #[derive(Clone, Debug, Deserialize)]
 pub struct StoreConfig {
+    /// Which store implementation to use.
     #[serde(rename = "type")]
     pub store_type: StoreType,
+    /// Feature store host.
     pub host: String,
+    /// Feature store port.
     pub port: u16,
 }
 
+/// Prometheus metrics HTTP exposition settings.
 #[derive(Clone, Debug, Deserialize)]
 pub struct MetricsConfig {
+    /// Port the metrics HTTP server listens on.
     pub port: u16,
 }
 
 /// Describes a single input or output tensor: name, data type, and shape.
 #[derive(Clone, Debug, Deserialize)]
 pub struct TensorSpec {
+    /// Tensor name as registered in the model.
     pub name: String,
+    /// Data type of the tensor elements (e.g. "float32").
     pub dtype: String,
+    /// Shape of the tensor, one element per dimension.
     pub shape: Vec<i64>,
 }
 
 /// Defines the input and output tensor shapes the model expects.
 #[derive(Clone, Debug, Deserialize)]
 pub struct ModelSchemaConfig {
+    /// Specs for each input tensor the model accepts.
     pub inputs: Vec<TensorSpec>,
+    /// Specs for each output tensor the model produces.
     pub outputs: Vec<TensorSpec>,
 }
 
@@ -122,60 +150,88 @@ pub struct StageObservability {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StageConfig {
+    /// Checks that the input tensor shape matches the expected shape.
     Validate {
+        /// Expected tensor dimensions; each element must be a positive size.
         expected_shape: Vec<i64>,
+        /// Observability wrappers for this stage.
         #[serde(flatten)]
         observability: StageObservability,
     },
+    /// Applies zero-mean unit-variance normalisation to the input tensor.
     Normalize {
+        /// Mean subtracted from each element.
         mean: f32,
+        /// Standard deviation used to normalise; must not be 0.
         std: f32,
+        /// Observability wrappers for this stage.
         #[serde(flatten)]
         observability: StageObservability,
     },
     /// Clips feature values to [min, max] before normalisation.
     Clip {
+        /// Lower bound; values below this are clamped to min.
         min: f32,
+        /// Upper bound; values above this are clamped to max.
         max: f32,
+        /// Observability wrappers for this stage.
         #[serde(flatten)]
         observability: StageObservability,
     },
     /// Replaces missing (NaN) feature values with a fixed default.
     Impute {
+        /// Replacement value for NaN elements.
         default_value: f32,
+        /// Observability wrappers for this stage.
         #[serde(flatten)]
         observability: StageObservability,
     },
+    /// Runs model inference via the configured backend.
     Infer {
+        /// Observability wrappers for this stage.
         #[serde(flatten)]
         observability: StageObservability,
     },
+    /// Transforms raw model output into a structured prediction.
     Postprocess {
+        /// Decision boundary for binary classification.
         threshold: f32,
+        /// How to interpret and transform the raw model score.
         output_type: OutputType,
+        /// Observability wrappers for this stage.
         #[serde(flatten)]
         observability: StageObservability,
     },
 }
 
+/// Ordered list of pipeline stages to execute per request.
 #[derive(Clone, Debug, Deserialize)]
 pub struct PipelineConfig {
+    /// Stage definitions in execution order.
     pub stages: Vec<StageConfig>,
 }
 
 /// Top-level config, owns all section configs.
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
+    /// gRPC server settings.
     pub grpc: GrpcConfig,
+    /// Inference backend settings.
     pub backend: BackendConfig,
+    /// Model registry settings.
     pub registry: RegistryConfig,
+    /// Feature store settings.
     pub store: StoreConfig,
+    /// Prometheus metrics settings.
     pub metrics: MetricsConfig,
+    /// Input and output tensor specs expected by the model.
     pub model_schema: ModelSchemaConfig,
+    /// Pipeline stage configuration.
     pub pipeline: PipelineConfig,
 }
 
 impl Config {
+    /// Loads and validates a config from the given TOML file path.
     pub fn load(path: &str) -> Result<Self, ConfigError> {
         let contents = std::fs::read_to_string(path)?;
         let config: Self = toml::from_str(&contents)?;
@@ -183,6 +239,7 @@ impl Config {
         Ok(config)
     }
 
+    /// Validates all config fields for semantic correctness.
     pub fn validate(&self) -> Result<(), ConfigError> {
         if self.pipeline.stages.is_empty() {
             return Err(ConfigError::Invalid {

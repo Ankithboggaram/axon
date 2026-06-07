@@ -35,10 +35,15 @@ pub mod redis;
 #[non_exhaustive]
 #[derive(Debug)]
 pub enum FetchResult {
+    /// Features were found and written into the destination buffer in full.
     Hit,
+    /// No entry exists for the entity; the destination buffer is left unchanged.
     Miss,
 }
 
+/// Client for fetching pre-computed feature vectors from an external store.
+///
+/// Add new store backends by implementing this trait; no other code needs to change.
 #[async_trait]
 pub trait FeatureStore: std::fmt::Debug + Send + Sync {
     /// Checks that the store is reachable. Called once at startup before
