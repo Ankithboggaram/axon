@@ -83,6 +83,7 @@ impl Drop for PipelineGuard {
     }
 }
 
+#[allow(clippy::expect_used)] // pipeline is Some until Drop::drop runs; reaching this after drop is a bug
 impl Deref for PipelineGuard {
     type Target = Pipeline<InferenceScratchpad>;
 
@@ -91,6 +92,7 @@ impl Deref for PipelineGuard {
     }
 }
 
+#[allow(clippy::expect_used)] // pipeline is Some until Drop::drop runs; reaching this after drop is a bug
 impl DerefMut for PipelineGuard {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.pipeline.as_mut().expect("guard used after drop")

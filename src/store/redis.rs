@@ -53,6 +53,7 @@ impl FeatureStore for RedisStore {
         Ok(())
     }
 
+    #[allow(clippy::expect_used)] // scratchpad is always C-order; non-contiguous layout is a construction bug
     async fn fetch_features(
         &self,
         entity_id: &str,

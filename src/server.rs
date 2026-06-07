@@ -52,6 +52,7 @@ impl InferenceServer {
     ///
     /// If `inline_features` is non-empty, writes them directly into the
     /// scratchpad. Otherwise fetches from the feature store by entity_id.
+    #[allow(clippy::expect_used)] // scratchpad is always C-order; non-contiguous layout is a construction bug
     async fn run_inference(
         &self,
         entity_id: &str,

@@ -204,18 +204,17 @@ pub fn build_scratchpad(config: &Config) -> anyhow::Result<InferenceScratchpad> 
 
 /// Checks that the stage sequence is structurally valid before building.
 pub(crate) fn validate_ordering(stages: &[StageConfig]) -> anyhow::Result<()> {
-    let infer_pos = stages
+    let Some(infer_pos) = stages
         .iter()
-        .position(|s| matches!(s, StageConfig::Infer { .. }));
-
-    if infer_pos.is_none() {
+        .position(|s| matches!(s, StageConfig::Infer { .. }))
+    else {
         anyhow::bail!("pipeline must contain an infer stage");
-    }
+    };
 
     if let Some(post_pos) = stages
         .iter()
         .position(|s| matches!(s, StageConfig::Postprocess { .. }))
-        && post_pos < infer_pos.unwrap()
+        && post_pos < infer_pos
     {
         anyhow::bail!("pipeline: postprocess stage must come after infer");
     }

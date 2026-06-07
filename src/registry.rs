@@ -33,6 +33,7 @@ pub struct ConfigSeed {
     pub threshold: Option<f32>,
 }
 
+#[allow(clippy::unwrap_used)] // writeln! to String is infallible; Write::write_str always returns Ok
 impl ConfigSeed {
     /// Generates a starter config.toml string from the seed values.
     ///

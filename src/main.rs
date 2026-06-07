@@ -1,5 +1,8 @@
 //! Entry point. Wires everything together at startup.
 
+#![deny(clippy::unwrap_used, clippy::expect_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
+
 pub mod backend;
 pub mod config;
 pub mod error;
@@ -63,6 +66,7 @@ enum Command {
     },
 }
 
+#[allow(clippy::expect_used)] // pool factory closures use FnMut() -> T with no error channel
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();

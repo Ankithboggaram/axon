@@ -54,6 +54,7 @@ impl std::fmt::Debug for OnnxBackend {
 
 #[async_trait]
 impl Backend for OnnxBackend {
+    #[allow(clippy::unwrap_used)] // Mutex::lock() panics only on poison, which means a prior panic already occurred
     async fn run(
         &self,
         inputs: &[NamedTensorRef<'_>],

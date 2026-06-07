@@ -8,6 +8,7 @@ use crate::config::ModelSchemaConfig;
 ///
 /// The caller is responsible for writing the returned string to the correct
 /// path inside the Triton model repository (e.g. `models/<name>/config.pbtxt`).
+#[allow(clippy::unwrap_used)] // writeln! to String is infallible; Write::write_str always returns Ok
 pub fn generate_triton_config(
     model_name: &str,
     schema: &ModelSchemaConfig,
@@ -37,6 +38,7 @@ pub fn generate_triton_config(
 }
 
 /// Writes a Triton `input [...]` or `output [...]` block for a set of tensors.
+#[allow(clippy::unwrap_used)] // writeln! to String is infallible; Write::write_str always returns Ok
 fn write_tensor_block(
     out: &mut String,
     field: &str,
