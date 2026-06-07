@@ -192,3 +192,100 @@ pub trait ModelRegistryClient: std::fmt::Debug + Send + Sync {
     /// Fetches model signature and logged params to seed a starter config.
     async fn fetch_config_seed(&self, name: &str, version: &str) -> anyhow::Result<ConfigSeed>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{ModelSchemaConfig, TensorSpec};
+
+    #[test]
+    fn empty_seed_has_todos_and_fixed_structure() {
+        let seed = ConfigSeed::default();
+        let out = seed.generate_config("my-model", "3");
+        assert!(out.contains("my-model"));
+        assert!(out.contains("\"3\""));
+        assert!(out.contains("TODO"));
+        assert!(out.contains("[grpc]"));
+        assert!(out.contains("[backend]"));
+        assert!(out.contains("[registry]"));
+        assert!(out.contains("[store]"));
+        assert!(out.contains("[metrics]"));
+        assert!(out.contains("[[pipeline.stages]]"));
+    }
+
+    #[test]
+    fn no_clip_stage_when_bounds_absent() {
+        let out = ConfigSeed::default().generate_config("m", "1");
+        assert!(!out.contains("type = \"clip\""));
+    }
+
+    #[test]
+    fn clip_stage_emitted_when_clip_min_set() {
+        let seed = ConfigSeed {
+            clip_min: Some(-1.0),
+            ..Default::default()
+        };
+        assert!(seed.generate_config("m", "1").contains("type = \"clip\""));
+    }
+
+    #[test]
+    fn clip_stage_emitted_when_clip_max_set() {
+        let seed = ConfigSeed {
+            clip_max: Some(1.0),
+            ..Default::default()
+        };
+        assert!(seed.generate_config("m", "1").contains("type = \"clip\""));
+    }
+
+    #[test]
+    fn full_seed_writes_all_values() {
+        let seed = ConfigSeed {
+            model_schema: Some(ModelSchemaConfig {
+                inputs: vec![TensorSpec {
+                    name: "features".to_owned(),
+                    dtype: "float32".to_owned(),
+                    shape: vec![1, 64],
+                }],
+                outputs: vec![TensorSpec {
+                    name: "score".to_owned(),
+                    dtype: "float32".to_owned(),
+                    shape: vec![1, 1],
+                }],
+            }),
+            mean: Some(0.5),
+            std: Some(1.5),
+            clip_min: Some(-3.0),
+            clip_max: Some(3.0),
+            threshold: Some(0.8),
+        };
+        let out = seed.generate_config("fraud", "7");
+        assert!(out.contains("fraud"));
+        assert!(out.contains("type = \"clip\""));
+        assert!(out.contains("mean = 0.5"));
+        assert!(out.contains("std  = 1.5"));
+        assert!(out.contains("threshold   = 0.8"));
+        assert!(out.contains("features"));
+        assert!(out.contains("score"));
+        assert!(!out.contains("name  = \"TODO\""));
+    }
+
+    #[test]
+    fn required_pipeline_stages_always_present() {
+        let out = ConfigSeed::default().generate_config("m", "1");
+        assert!(out.contains("type          = \"impute\""));
+        assert!(out.contains("type = \"normalize\""));
+        assert!(out.contains("type = \"infer\""));
+        assert!(out.contains("type        = \"postprocess\""));
+    }
+
+    #[test]
+    fn partial_clip_uses_todo_for_missing_bound() {
+        let seed = ConfigSeed {
+            clip_min: Some(-5.0),
+            ..Default::default()
+        };
+        let out = seed.generate_config("m", "1");
+        assert!(out.contains("type = \"clip\""));
+        assert!(out.contains("max  = TODO"));
+    }
+}

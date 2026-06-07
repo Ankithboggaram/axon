@@ -203,7 +203,7 @@ pub fn build_scratchpad(config: &Config) -> anyhow::Result<InferenceScratchpad> 
 }
 
 /// Checks that the stage sequence is structurally valid before building.
-fn validate_ordering(stages: &[StageConfig]) -> anyhow::Result<()> {
+pub(crate) fn validate_ordering(stages: &[StageConfig]) -> anyhow::Result<()> {
     let infer_pos = stages
         .iter()
         .position(|s| matches!(s, StageConfig::Infer { .. }));
@@ -268,5 +268,139 @@ fn wrap(
         (Box::new(timed), Some(metrics))
     } else {
         (stage, None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_ordering;
+    use crate::config::{OutputType, StageConfig, StageObservability};
+
+    fn obs() -> StageObservability {
+        StageObservability {
+            timed: None,
+            instrumented: None,
+            retries: None,
+            deadline_ms: None,
+        }
+    }
+
+    #[test]
+    fn rejects_empty_stages() {
+        assert!(validate_ordering(&[]).is_err());
+    }
+
+    #[test]
+    fn accepts_infer_only() {
+        assert!(
+            validate_ordering(&[StageConfig::Infer {
+                observability: obs()
+            }])
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn rejects_missing_infer() {
+        let stages = vec![StageConfig::Normalize {
+            mean: 0.0,
+            std: 1.0,
+            observability: obs(),
+        }];
+        assert!(validate_ordering(&stages).is_err());
+    }
+
+    #[test]
+    fn rejects_postprocess_before_infer() {
+        let stages = vec![
+            StageConfig::Postprocess {
+                threshold: 0.5,
+                output_type: OutputType::Binary,
+                observability: obs(),
+            },
+            StageConfig::Infer {
+                observability: obs(),
+            },
+        ];
+        assert!(validate_ordering(&stages).is_err());
+    }
+
+    #[test]
+    fn accepts_postprocess_after_infer() {
+        let stages = vec![
+            StageConfig::Infer {
+                observability: obs(),
+            },
+            StageConfig::Postprocess {
+                threshold: 0.5,
+                output_type: OutputType::Binary,
+                observability: obs(),
+            },
+        ];
+        assert!(validate_ordering(&stages).is_ok());
+    }
+
+    #[test]
+    fn rejects_impute_after_validate() {
+        let stages = vec![
+            StageConfig::Validate {
+                expected_shape: vec![1, 10],
+                observability: obs(),
+            },
+            StageConfig::Impute {
+                default_value: 0.0,
+                observability: obs(),
+            },
+            StageConfig::Infer {
+                observability: obs(),
+            },
+        ];
+        assert!(validate_ordering(&stages).is_err());
+    }
+
+    #[test]
+    fn accepts_impute_before_validate() {
+        let stages = vec![
+            StageConfig::Impute {
+                default_value: 0.0,
+                observability: obs(),
+            },
+            StageConfig::Validate {
+                expected_shape: vec![1, 10],
+                observability: obs(),
+            },
+            StageConfig::Infer {
+                observability: obs(),
+            },
+        ];
+        assert!(validate_ordering(&stages).is_ok());
+    }
+
+    #[test]
+    fn accepts_validate_without_impute() {
+        let stages = vec![
+            StageConfig::Validate {
+                expected_shape: vec![1, 10],
+                observability: obs(),
+            },
+            StageConfig::Infer {
+                observability: obs(),
+            },
+        ];
+        assert!(validate_ordering(&stages).is_ok());
+    }
+
+    #[test]
+    fn accepts_impute_without_validate() {
+        let stages = vec![
+            StageConfig::Impute {
+                default_value: 0.0,
+                observability: obs(),
+            },
+            StageConfig::Infer {
+                observability: obs(),
+            },
+        ];
+        assert!(validate_ordering(&stages).is_ok());
     }
 }

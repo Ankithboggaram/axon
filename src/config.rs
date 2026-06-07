@@ -238,3 +238,177 @@ impl Config {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn obs() -> StageObservability {
+        StageObservability {
+            timed: None,
+            instrumented: None,
+            retries: None,
+            deadline_ms: None,
+        }
+    }
+
+    fn valid_config() -> Config {
+        Config {
+            grpc: GrpcConfig {
+                host: "0.0.0.0".to_owned(),
+                port: 50051,
+                stream_poll_interval_ms: 100,
+                request_timeout_ms: 5000,
+                pool_size: None,
+            },
+            backend: BackendConfig {
+                backend_type: BackendType::OnnxRuntime,
+                model: None,
+                host: None,
+                port: None,
+            },
+            registry: RegistryConfig {
+                registry_type: RegistryType::Mlflow,
+                uri: "http://localhost:5000".to_owned(),
+                model_name: "model".to_owned(),
+                model_version: "1".to_owned(),
+            },
+            store: StoreConfig {
+                store_type: StoreType::Redis,
+                host: "localhost".to_owned(),
+                port: 6379,
+            },
+            metrics: MetricsConfig { port: 9090 },
+            model_schema: ModelSchemaConfig {
+                inputs: vec![TensorSpec {
+                    name: "input".to_owned(),
+                    dtype: "float32".to_owned(),
+                    shape: vec![1, 10],
+                }],
+                outputs: vec![TensorSpec {
+                    name: "output".to_owned(),
+                    dtype: "float32".to_owned(),
+                    shape: vec![1, 1],
+                }],
+            },
+            pipeline: PipelineConfig {
+                stages: vec![StageConfig::Infer {
+                    observability: obs(),
+                }],
+            },
+        }
+    }
+
+    #[test]
+    fn valid_config_passes() {
+        assert!(valid_config().validate().is_ok());
+    }
+
+    #[test]
+    fn rejects_empty_pipeline() {
+        let mut cfg = valid_config();
+        cfg.pipeline.stages.clear();
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_zero_grpc_port() {
+        let mut cfg = valid_config();
+        cfg.grpc.port = 0;
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_zero_stream_poll_interval() {
+        let mut cfg = valid_config();
+        cfg.grpc.stream_poll_interval_ms = 0;
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_zero_request_timeout() {
+        let mut cfg = valid_config();
+        cfg.grpc.request_timeout_ms = 0;
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_zero_metrics_port() {
+        let mut cfg = valid_config();
+        cfg.metrics.port = 0;
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_triton_backend() {
+        let mut cfg = valid_config();
+        cfg.backend.backend_type = BackendType::Triton;
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_empty_store_host() {
+        let mut cfg = valid_config();
+        cfg.store.host.clear();
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_zero_store_port() {
+        let mut cfg = valid_config();
+        cfg.store.port = 0;
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_no_inputs() {
+        let mut cfg = valid_config();
+        cfg.model_schema.inputs.clear();
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_multiple_inputs() {
+        let mut cfg = valid_config();
+        cfg.model_schema.inputs.push(TensorSpec {
+            name: "input2".to_owned(),
+            dtype: "float32".to_owned(),
+            shape: vec![1, 5],
+        });
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_no_outputs() {
+        let mut cfg = valid_config();
+        cfg.model_schema.outputs.clear();
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_normalize_zero_std() {
+        let mut cfg = valid_config();
+        cfg.pipeline.stages = vec![StageConfig::Normalize {
+            mean: 0.0,
+            std: 0.0,
+            observability: obs(),
+        }];
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn accepts_normalize_nonzero_std() {
+        let mut cfg = valid_config();
+        cfg.pipeline.stages = vec![
+            StageConfig::Normalize {
+                mean: 0.5,
+                std: 1.5,
+                observability: obs(),
+            },
+            StageConfig::Infer {
+                observability: obs(),
+            },
+        ];
+        assert!(cfg.validate().is_ok());
+    }
+}
