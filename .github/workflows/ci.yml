@@ -29,7 +29,7 @@ jobs:
         run: cargo test --all-targets
 
   test-msrv:
-    name: Test (MSRV ${{ env.MSRV }})
+    name: Test (MSRV 1.85)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -80,6 +80,13 @@ jobs:
         run: cargo doc --no-deps
         env:
           RUSTDOCFLAGS: "-D warnings"
+
+  deny:
+    name: Deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
 
   audit:
     name: Security audit
