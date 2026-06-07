@@ -1,5 +1,9 @@
 # axon
 
+[![CI](https://github.com/Ankithboggaram/axon/actions/workflows/ci.yml/badge.svg)](https://github.com/Ankithboggaram/axon/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![MSRV](https://img.shields.io/badge/rustc-1.85+-orange.svg)](rust-toolchain.toml)
+
 Axon is a configuration-driven ML inference server for real-time model serving.
 
 Part of the **Cortex** platform. Works alongside Dendrite (feature pipeline) and Synapse (training pipeline), but deployable on its own.
