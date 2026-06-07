@@ -8,6 +8,7 @@ repository = "https://github.com/Ankithboggaram/axon"
 homepage    = "https://github.com/Ankithboggaram/axon"
 keywords    = ["inference", "onnx", "grpc", "machine-learning", "pipeline"]
 categories  = ["science"]
+rust-version = "1.85"
 
 [package.metadata.docs.rs]
 all-features = false
