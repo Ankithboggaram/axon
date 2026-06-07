@@ -171,7 +171,7 @@ impl ModelRegistryClient for MlflowClient {
         let mlmodel_text = self.download_mlmodel(name, &resolved).await?;
 
         // Parse once: MLmodel contains both the signature and the run_id.
-        let mlmodel: MlModelFile = serde_yml::from_str(&mlmodel_text)
+        let mlmodel: MlModelFile = serde_yaml_ng::from_str(&mlmodel_text)
             .map_err(|e| anyhow::anyhow!("failed to parse MLmodel YAML: {e}"))?;
 
         let run_id = mlmodel.run_id.ok_or_else(|| {

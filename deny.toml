@@ -17,5 +17,10 @@ wildcards = "deny"
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 vulnerability = "deny"
-unmaintained = "warn"
 yanked = "deny"
+ignore = [
+    # protobuf v2.28.0 (transitive via prometheus) has a stack overflow when
+    # *parsing* untrusted input. prometheus only generates protobuf output and
+    # never parses incoming protobuf, so this is not exploitable in axon.
+    { id = "RUSTSEC-2024-0437" },
+]
