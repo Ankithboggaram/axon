@@ -4,11 +4,11 @@
 //! matching to remain compatible with future variants.
 //!
 //! Each enum corresponds to one subsystem:
-//! - [`ConfigError`]   — config file loading and validation
-//! - [`BackendError`]  — inference backend (ONNX Runtime, Triton, …)
-//! - [`StoreError`]    — feature store (Redis, …)
-//! - [`RegistryError`] — model registry (MLflow, …)
-//! - [`ServeError`]    — server startup and metrics initialisation
+//! - [`ConfigError`]   - config file loading and validation
+//! - [`BackendError`]  - inference backend (ONNX Runtime, Triton, ...)
+//! - [`StoreError`]    - feature store (Redis, ...)
+//! - [`RegistryError`] - model registry (MLflow, ...)
+//! - [`ServeError`]    - server startup and metrics initialisation
 
 use thiserror::Error;
 
@@ -27,7 +27,7 @@ pub enum ConfigError {
     /// The config was parsed successfully but failed semantic validation.
     ///
     /// `field` identifies the offending config key; `reason` explains why.
-    #[error("invalid config — {field}: {reason}")]
+    #[error("invalid config: {field}: {reason}")]
     Invalid { field: &'static str, reason: String },
 }
 
