@@ -7,13 +7,24 @@
 //! 3. Initialise the inference backend ([`backend::onnx::OnnxBackend`])
 //! 4. Build the processing pipeline from config ([`pipeline::build::build`])
 //! 5. Register Prometheus metrics and spawn the metrics HTTP listener
-//! 6. Ping the feature store (health is NOT set to `SERVING` until this passes)
+//! 6. Ping the feature store (readiness is NOT set to `SERVING` until this passes)
 //! 7. Pre-populate the scratchpad and pipeline pools
-//! 8. Bind the gRPC listener and set health to `SERVING`
+//! 8. Bind the gRPC listener; set liveness (`""`) and readiness
+//!    (`axon.inference.v1.InferenceService`) to `SERVING`
+//! 9. Spawn a background task that pings the store every
+//!    `store.health_check_interval_secs` seconds; two consecutive failures flip
+//!    readiness to `NOT_SERVING`; recovery flips it back to `SERVING`
 //!
-//! The ordering of steps 6 and 8 is intentional: the gRPC health check must not
-//! report `SERVING` until the feature store is confirmed reachable. A pod that
-//! reports healthy but cannot fetch features would silently fail every request.
+//! ## Liveness vs readiness
+//!
+//! The empty-string service (`""`) represents the overall process. It is set to
+//! `SERVING` once at startup and never changed; a Kubernetes liveness probe
+//! uses this to determine whether to restart the pod.
+//!
+//! The named service (`axon.inference.v1.InferenceService`) represents
+//! readiness: can this instance actually serve traffic right now? The background
+//! health task drives it. A readiness probe that fails causes the pod to be
+//! removed from load balancer rotation without restarting it.
 
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
@@ -38,6 +49,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use clap::{Parser, Subcommand};
+use tonic_health::ServingStatus;
 use tracing::{error, info};
 
 use crate::backend::Backend;
@@ -221,9 +233,22 @@ async fn main() -> anyhow::Result<()> {
             info!(pool_size, "pipeline pool ready");
 
             let (mut health_reporter, health_service) = tonic_health::server::health_reporter();
+            // Liveness: the process is alive. Never changes after this point.
+            health_reporter
+                .set_service_status("", ServingStatus::Serving)
+                .await;
+            // Readiness: the store ping just passed, so this instance can serve traffic.
             health_reporter
                 .set_serving::<InferenceServiceServer<InferenceServer>>()
                 .await;
+
+            let health_interval =
+                Duration::from_secs(config.store.health_check_interval_secs.unwrap_or(10));
+            tokio::spawn(store_health_check(
+                Arc::clone(&store),
+                health_reporter.clone(),
+                health_interval,
+            ));
 
             let inference_server = InferenceServer::new(
                 store,
@@ -289,6 +314,49 @@ fn init_tracing() {
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
+}
+
+/// Periodically pings the feature store and updates the gRPC readiness probe.
+///
+/// Two consecutive ping failures flip the named service to `NOT_SERVING`.
+/// The first successful ping after that restores it to `SERVING`.
+/// Liveness (`""`) is never touched; only readiness changes here.
+async fn store_health_check(
+    store: Arc<dyn FeatureStore>,
+    mut health_reporter: tonic_health::server::HealthReporter,
+    interval: Duration,
+) {
+    let mut consecutive_failures: u32 = 0;
+    loop {
+        tokio::time::sleep(interval).await;
+        match store.ping().await {
+            Ok(()) => {
+                if consecutive_failures >= 2 {
+                    health_reporter
+                        .set_serving::<InferenceServiceServer<InferenceServer>>()
+                        .await;
+                    info!("feature store reachable again; readiness restored");
+                }
+                consecutive_failures = 0;
+            }
+            Err(e) => {
+                consecutive_failures += 1;
+                tracing::warn!(
+                    consecutive_failures,
+                    "feature store health check failed: {e}"
+                );
+                if consecutive_failures == 2 {
+                    health_reporter
+                        .set_not_serving::<InferenceServiceServer<InferenceServer>>()
+                        .await;
+                    tracing::warn!(
+                        "feature store unreachable for 2 consecutive checks; \
+                         readiness set to NOT_SERVING"
+                    );
+                }
+            }
+        }
+    }
 }
 
 /// Serves Prometheus metrics over a minimal HTTP listener on the given port.

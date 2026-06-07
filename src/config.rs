@@ -101,6 +101,10 @@ pub struct StoreConfig {
     pub host: String,
     /// Feature store port.
     pub port: u16,
+    /// How often the background task pings the store to update the readiness probe, in seconds.
+    /// Defaults to 10. The service is marked NOT_SERVING after two consecutive failures.
+    #[serde(default)]
+    pub health_check_interval_secs: Option<u64>,
 }
 
 /// Prometheus metrics HTTP exposition settings.
@@ -300,6 +304,13 @@ impl Config {
             });
         }
 
+        if self.store.health_check_interval_secs == Some(0) {
+            return Err(ConfigError::Invalid {
+                field: "store.health_check_interval_secs",
+                reason: "must not be 0; omit the field to use the default of 10 seconds".into(),
+            });
+        }
+
         if self.model_schema.inputs.is_empty() {
             return Err(ConfigError::Invalid {
                 field: "model_schema.inputs",
@@ -377,6 +388,7 @@ mod tests {
                 store_type: StoreType::Redis,
                 host: "localhost".to_owned(),
                 port: 6379,
+                health_check_interval_secs: None,
             },
             metrics: MetricsConfig { port: 9090 },
             model_schema: ModelSchemaConfig {
@@ -458,6 +470,20 @@ mod tests {
         let mut cfg = valid_config();
         cfg.store.port = 0;
         assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_zero_health_check_interval() {
+        let mut cfg = valid_config();
+        cfg.store.health_check_interval_secs = Some(0);
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn accepts_explicit_health_check_interval() {
+        let mut cfg = valid_config();
+        cfg.store.health_check_interval_secs = Some(30);
+        assert!(cfg.validate().is_ok());
     }
 
     #[test]
