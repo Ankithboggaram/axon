@@ -107,8 +107,8 @@ async fn main() -> anyhow::Result<()> {
         Command::Serve {
             config: config_path,
         } => {
-            let config = Config::load(&config_path)
-                .map_err(|e| anyhow::anyhow!("failed to load config from '{config_path}': {e}"))?;
+            let config =
+                Config::load(&config_path).map_err(|e| report_config_error(&config_path, e))?;
             info!(path = config_path, "config loaded");
 
             let registry: Arc<dyn ModelRegistryClient> = match config.registry.registry_type {
@@ -244,6 +244,25 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+/// Converts a [`crate::config::ConfigError`] into a structured CLI error message.
+///
+/// Each variant gets a distinct format so the operator knows immediately whether
+/// the problem is a missing file, a TOML syntax error, or a bad value.
+fn report_config_error(path: &str, e: crate::error::ConfigError) -> anyhow::Error {
+    use crate::error::ConfigError;
+    match e {
+        ConfigError::Io(io) => anyhow::anyhow!(
+            "could not read config file '{path}'\n  cause:  {io}\n  hint:   check the path is correct and the file is readable"
+        ),
+        ConfigError::Parse(p) => anyhow::anyhow!(
+            "config file '{path}' contains invalid TOML\n  cause:  {p}\n  hint:   run `axon init` to generate a valid starter config"
+        ),
+        ConfigError::Invalid { field, reason } => anyhow::anyhow!(
+            "config file '{path}' failed validation\n  field:  {field}\n  reason: {reason}\n  hint:   run `axon init` to generate a valid starter config"
+        ),
+    }
 }
 
 fn init_tracing() {
