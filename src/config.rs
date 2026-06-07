@@ -2,6 +2,7 @@
 
 use serde::Deserialize;
 
+#[non_exhaustive]
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BackendType {
@@ -11,12 +12,14 @@ pub enum BackendType {
     Triton,
 }
 
+#[non_exhaustive]
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StoreType {
     Redis,
 }
 
+#[non_exhaustive]
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RegistryType {
@@ -24,6 +27,7 @@ pub enum RegistryType {
 }
 
 /// Output type produced by the postprocess stage.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OutputType {
@@ -112,6 +116,7 @@ pub struct StageObservability {
 /// Each variant carries only the parameters relevant to that stage type.
 ///
 // TODO: Implement drift_detect, audit, argmax stages.
+#[non_exhaustive]
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StageConfig {

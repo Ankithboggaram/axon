@@ -10,6 +10,7 @@ pub mod redis;
 /// `Hit` means features were found and written into the destination buffer.
 /// `Miss` means no entry exists for the entity; the caller should let the
 /// impute stage handle the zeroed buffer.
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum FetchResult {
     Hit,
