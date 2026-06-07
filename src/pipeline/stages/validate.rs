@@ -63,6 +63,7 @@ mod tests {
     use arrayvec::ArrayString;
     use ndarray::arr1;
     use pipex::stage::Stage;
+    use proptest::prelude::*;
 
     use super::*;
     use crate::pipeline::InferenceScratchpad;
@@ -129,5 +130,32 @@ mod tests {
         };
         let mut ctx = ctx(arr1(&[-1.0f32, 0.0, 0.5, 1e6]).into_dyn());
         assert!(stage.run(&mut ctx).is_ok());
+    }
+
+    proptest! {
+        #[test]
+        fn validate_accepts_any_finite_correct_shape(
+            values in proptest::collection::vec(-1e6f32..1e6f32, 1..50usize),
+        ) {
+            let n = values.len();
+            let mut stage = ValidateStage {
+                expected_shape: Box::new([n]),
+            };
+            let mut ctx = ctx(ndarray::arr1(&values).into_dyn());
+            prop_assert!(stage.run(&mut ctx).is_ok());
+        }
+
+        #[test]
+        fn validate_rejects_any_wrong_shape(
+            values in proptest::collection::vec(-1e6f32..1e6f32, 1..50usize),
+            extra in 1usize..10usize,
+        ) {
+            let n = values.len();
+            let mut stage = ValidateStage {
+                expected_shape: Box::new([n + extra]),
+            };
+            let mut ctx = ctx(ndarray::arr1(&values).into_dyn());
+            prop_assert!(stage.run(&mut ctx).is_err());
+        }
     }
 }

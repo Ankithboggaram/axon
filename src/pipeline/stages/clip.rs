@@ -30,6 +30,7 @@ mod tests {
     use arrayvec::ArrayString;
     use ndarray::arr1;
     use pipex::stage::Stage;
+    use proptest::prelude::*;
 
     use super::*;
     use crate::pipeline::InferenceScratchpad;
@@ -93,5 +94,36 @@ mod tests {
         let mut stage = ClipStage { min: 0.0, max: 1.0 };
         let mut ctx = ctx(arr1(&[-999.0f32, 999.0]).into_dyn());
         assert!(stage.run(&mut ctx).is_ok());
+    }
+
+    proptest! {
+        #[test]
+        fn clip_output_always_in_range(
+            values in proptest::collection::vec(-1e6f32..1e6f32, 1..50usize),
+            min in -1e6f32..0.0f32,
+            delta in 1e-3f32..2e6f32,
+        ) {
+            let max = min + delta;
+            let mut stage = ClipStage { min, max };
+            let mut ctx = ctx(ndarray::arr1(&values).into_dyn());
+            stage.run(&mut ctx).unwrap();
+            for &v in ctx.input.iter() {
+                prop_assert!(v >= min && v <= max, "value {} outside [{}, {}]", v, min, max);
+            }
+        }
+
+        #[test]
+        fn clip_in_range_elements_unchanged(
+            min in -1e6f32..0.0f32,
+            delta in 1e-3f32..2e6f32,
+            t in 0.01f32..0.99f32,
+        ) {
+            let max = min + delta;
+            let val = min + t * delta;
+            let mut stage = ClipStage { min, max };
+            let mut ctx = ctx(ndarray::arr1(&[val]).into_dyn());
+            stage.run(&mut ctx).unwrap();
+            prop_assert_eq!(ctx.input[[0]], val);
+        }
     }
 }

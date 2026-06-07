@@ -33,6 +33,7 @@ mod tests {
     use arrayvec::ArrayString;
     use ndarray::arr1;
     use pipex::stage::Stage;
+    use proptest::prelude::*;
 
     use super::*;
     use crate::pipeline::InferenceScratchpad;
@@ -101,5 +102,26 @@ mod tests {
         };
         let mut ctx = ctx(arr1(&[1.0f32]).into_dyn());
         assert!(stage.run(&mut ctx).is_ok());
+    }
+
+    proptest! {
+        #[test]
+        fn normalize_output_matches_formula(
+            values in proptest::collection::vec(-1e3f32..1e3f32, 1..50usize),
+            mean in -1e3f32..1e3f32,
+            inv_std in 0.01f32..100.0f32,
+        ) {
+            let expected: Vec<f32> = values.iter().map(|&v| (v - mean) * inv_std).collect();
+            let mut stage = NormalizeStage { mean, inv_std };
+            let mut ctx = ctx(ndarray::arr1(&values).into_dyn());
+            stage.run(&mut ctx).unwrap();
+            for (i, &got) in ctx.input.iter().enumerate() {
+                prop_assert!(
+                    (got - expected[i]).abs() < 1e-2,
+                    "index {}: got {}, expected {}",
+                    i, got, expected[i]
+                );
+            }
+        }
     }
 }

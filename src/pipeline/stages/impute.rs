@@ -29,6 +29,7 @@ mod tests {
     use arrayvec::ArrayString;
     use ndarray::arr1;
     use pipex::stage::Stage;
+    use proptest::prelude::*;
 
     use super::*;
     use crate::pipeline::InferenceScratchpad;
@@ -79,5 +80,34 @@ mod tests {
         let mut stage = ImputeStage { default_value: 0.0 };
         let mut ctx = ctx(arr1(&[f32::NAN, f32::NAN]).into_dyn());
         assert!(stage.run(&mut ctx).is_ok());
+    }
+
+    proptest! {
+        #[test]
+        fn impute_removes_all_nans(
+            values in proptest::collection::vec(proptest::num::f32::ANY, 1..50usize),
+            default_value in -1e6f32..1e6f32,
+        ) {
+            let mut stage = ImputeStage { default_value };
+            let mut ctx = ctx(ndarray::arr1(&values).into_dyn());
+            stage.run(&mut ctx).unwrap();
+            for &v in ctx.input.iter() {
+                prop_assert!(!v.is_nan(), "NaN survived imputation");
+            }
+        }
+
+        #[test]
+        fn impute_preserves_non_nan_values(
+            values in proptest::collection::vec(-1e6f32..1e6f32, 1..50usize),
+            default_value in proptest::num::f32::ANY,
+        ) {
+            let original = values.clone();
+            let mut stage = ImputeStage { default_value };
+            let mut ctx = ctx(ndarray::arr1(&values).into_dyn());
+            stage.run(&mut ctx).unwrap();
+            for (i, &v) in ctx.input.iter().enumerate() {
+                prop_assert_eq!(v, original[i]);
+            }
+        }
     }
 }

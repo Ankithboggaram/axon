@@ -79,5 +79,8 @@ clap = { version = "4", features = ["derive"] }
 tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
+[dev-dependencies]
+proptest = "1"
+
 [build-dependencies]
 tonic-build = "0.12"
