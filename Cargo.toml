@@ -4,6 +4,14 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 description = "A configurable real-time ML inference engine, part of the Cortex platform"
+repository = "https://github.com/Ankithboggaram/axon"
+homepage    = "https://github.com/Ankithboggaram/axon"
+keywords    = ["inference", "onnx", "grpc", "machine-learning", "pipeline"]
+categories  = ["science"]
+
+[package.metadata.docs.rs]
+all-features = false
+rustdoc-args = ["--cfg", "docsrs"]
 
 [profile.release]
 opt-level = 3
