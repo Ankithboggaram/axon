@@ -63,7 +63,7 @@ impl PipelinePool {
     }
 }
 
-/// gs guard that holds one pipeline checked out from a [`PipelinePool`].
+/// RAII guard that holds one pipeline checked out from a [`PipelinePool`].
 ///
 /// Derefs to `Pipeline<InferenceScratchpad>`. On drop the pipeline is returned
 /// to the pool if capacity has not been reached; otherwise it is dropped.
