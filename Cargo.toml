@@ -82,6 +82,19 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 [dev-dependencies]
 proptest = "1"
 image    = { version = "0.25", default-features = false, features = ["png"] }
+divan    = "0.1"
+
+[[bench]]
+name    = "backend"
+harness = false
+
+[[bench]]
+name    = "pipeline"
+harness = false
+
+[[bench]]
+name    = "pool"
+harness = false
 
 [build-dependencies]
 tonic-build = "0.12"
