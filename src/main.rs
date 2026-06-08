@@ -2,10 +2,10 @@
 //!
 //! ## Startup sequence
 //!
-//! 1. Parse CLI args and load `config.toml` via [`config::Config::load`]
+//! 1. Parse CLI args and load `config.toml` via [`axon::config::Config::load`]
 //! 2. Construct the model registry client and fetch the ONNX artifact
-//! 3. Initialise the inference backend ([`backend::onnx::OnnxBackend`])
-//! 4. Build the processing pipeline from config ([`pipeline::build::build`])
+//! 3. Initialise the inference backend ([`axon::backend::onnx::OnnxBackend`])
+//! 4. Build the processing pipeline from config ([`axon::pipeline::build::build`])
 //! 5. Register Prometheus metrics and spawn the metrics HTTP listener
 //! 6. Ping the feature store (readiness is NOT set to `SERVING` until this passes)
 //! 7. Pre-populate the scratchpad and pipeline pools
@@ -28,21 +28,6 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
-#![warn(missing_docs)]
-
-pub mod backend;
-pub mod config;
-pub mod error;
-#[allow(missing_docs)]
-pub mod proto {
-    tonic::include_proto!("axon.inference.v1");
-}
-pub mod metrics;
-pub mod pipeline;
-pub mod registry;
-pub mod server;
-pub mod store;
-pub mod types;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -52,20 +37,19 @@ use clap::{Parser, Subcommand};
 use tonic_health::ServingStatus;
 use tracing::{error, info};
 
-use crate::backend::Backend;
-use crate::backend::onnx::OnnxBackend;
-use crate::backend::packaging::generate_triton_config;
-use crate::config::{BackendType, Config, RegistryType, StoreType};
-use crate::metrics::Metrics;
-use crate::pipeline::build::{build, build_scratchpad};
-use crate::pipeline::pool::PipelinePool;
-use crate::proto::inference_service_server::InferenceServiceServer;
-use crate::registry::ModelRegistryClient;
-use crate::registry::mlflow::MlflowClient;
-use crate::server::InferenceServer;
-use crate::store::FeatureStore;
-use crate::store::redis::RedisStore;
-
+use axon::backend::Backend;
+use axon::backend::onnx::OnnxBackend;
+use axon::backend::packaging::generate_triton_config;
+use axon::config::{BackendType, Config, RegistryType, StoreType};
+use axon::metrics::Metrics;
+use axon::pipeline::build::{build, build_scratchpad};
+use axon::pipeline::pool::PipelinePool;
+use axon::proto::inference_service_server::InferenceServiceServer;
+use axon::registry::ModelRegistryClient;
+use axon::registry::mlflow::MlflowClient;
+use axon::server::InferenceServer;
+use axon::store::FeatureStore;
+use axon::store::redis::RedisStore;
 use pipex::pool::ScratchpadPool;
 
 #[derive(Parser)]
@@ -141,6 +125,7 @@ async fn main() -> anyhow::Result<()> {
 
             let registry: Arc<dyn ModelRegistryClient> = match config.registry.registry_type {
                 RegistryType::Mlflow => Arc::new(MlflowClient::new(&config.registry.uri)?),
+                _ => anyhow::bail!("unsupported registry type"),
             };
 
             let store: Arc<dyn FeatureStore> = match config.store.store_type {
@@ -148,6 +133,7 @@ async fn main() -> anyhow::Result<()> {
                     let url = format!("redis://{}:{}", config.store.host, config.store.port);
                     Arc::new(RedisStore::new(&url, "features")?)
                 }
+                _ => anyhow::bail!("unsupported store type"),
             };
 
             info!(
@@ -194,7 +180,7 @@ async fn main() -> anyhow::Result<()> {
                 BackendType::OnnxRuntime => {
                     Arc::new(OnnxBackend::new(&model.local_path, session_pool_size)?)
                 }
-                BackendType::Triton => unreachable!("Triton rejected by Config::validate"),
+                _ => unreachable!("unsupported backend rejected by Config::validate"),
             };
             info!(session_pool_size, "session pool ready");
 
@@ -214,9 +200,6 @@ async fn main() -> anyhow::Result<()> {
 
             let pool_size = config.grpc.pool_size.unwrap_or_else(default_pool_size);
 
-            // Scratchpad pool: pre-allocated tensor buffers, one per concurrent request.
-            // ScratchpadPool pre-populates to capacity and resets on return, so no
-            // allocation occurs on the hot path.
             let config_s = config.clone();
             // FnMut() -> T has no error channel; expect is the only option here.
             #[allow(clippy::expect_used)]
@@ -224,9 +207,6 @@ async fn main() -> anyhow::Result<()> {
                 move || build_scratchpad(&config_s).expect("scratchpad pool factory failed");
             let scratchpad_pool = Arc::new(ScratchpadPool::new(pool_size, scratchpad_factory));
 
-            // Pipeline pool: one pipeline per concurrent request slot.
-            // first_pipeline carries the registered StageMetrics so Prometheus sees
-            // real traffic. Additional slots carry unregistered handles.
             let config_p = config.clone();
             let backend_p = Arc::clone(&backend);
             #[allow(clippy::expect_used)]
@@ -299,12 +279,8 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Converts a [`crate::error::ConfigError`] into a structured CLI error message.
-///
-/// Each variant gets a distinct format so the operator knows immediately whether
-/// the problem is a missing file, a TOML syntax error, or a bad value.
-fn report_config_error(path: &str, e: crate::error::ConfigError) -> anyhow::Error {
-    use crate::error::ConfigError;
+fn report_config_error(path: &str, e: axon::error::ConfigError) -> anyhow::Error {
+    use axon::error::ConfigError;
     match e {
         ConfigError::Io(io) => anyhow::anyhow!(
             "could not read config file '{path}'\n  cause:  {io}\n  hint:   check the path is correct and the file is readable"
@@ -315,6 +291,7 @@ fn report_config_error(path: &str, e: crate::error::ConfigError) -> anyhow::Erro
         ConfigError::Invalid { field, reason } => anyhow::anyhow!(
             "config file '{path}' failed validation\n  field:  {field}\n  reason: {reason}\n  hint:   run `axon init` to generate a valid starter config"
         ),
+        _ => anyhow::anyhow!("config file '{path}' failed to load: {e:?}"),
     }
 }
 
@@ -333,11 +310,6 @@ fn init_tracing() {
         .init();
 }
 
-/// Periodically pings the feature store and updates the gRPC readiness probe.
-///
-/// Two consecutive ping failures flip the named service to `NOT_SERVING`.
-/// The first successful ping after that restores it to `SERVING`.
-/// Liveness (`""`) is never touched; only readiness changes here.
 async fn store_health_check(
     store: Arc<dyn FeatureStore>,
     mut health_reporter: tonic_health::server::HealthReporter,
@@ -376,11 +348,6 @@ async fn store_health_check(
     }
 }
 
-/// Serves Prometheus metrics over a minimal HTTP listener on the given port.
-///
-/// Any TCP connection receives the full metrics payload regardless of the
-/// request path or method. Prometheus always scrapes GET /metrics, and we
-/// have no other routes to protect.
 async fn serve_metrics(metrics: Arc<Metrics>, port: u16) {
     use tokio::io::AsyncWriteExt as _;
 
