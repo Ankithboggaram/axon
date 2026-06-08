@@ -1,0 +1,63 @@
+[grpc]
+host = "0.0.0.0"
+port = 50051
+stream_poll_interval_ms = 1
+request_timeout_ms = 5000
+pool_size = 4
+session_pool_size = 4
+
+[backend]
+type = "onnx_runtime"
+
+[registry]
+type = "mlflow"
+uri = "http://localhost:5000"
+model_name = "fraud_model"
+model_version = "latest"
+
+[store]
+type = "redis"
+host = "localhost"
+port = 6379
+health_check_interval_secs = 10
+
+[metrics]
+port = 9090
+
+[[model_schema.inputs]]
+name = "features"
+dtype = "float32"
+shape = [1, 32]
+
+[[model_schema.outputs]]
+name = "score"
+dtype = "float32"
+shape = [1, 1]
+
+[[pipeline.stages]]
+type = "impute"
+default_value = 0.0
+
+[[pipeline.stages]]
+type = "validate"
+expected_shape = [1, 32]
+
+[[pipeline.stages]]
+type = "clip"
+min = -3.0
+max = 3.0
+
+[[pipeline.stages]]
+type = "normalize"
+mean = 0.0
+std = 1.0
+
+[[pipeline.stages]]
+type = "infer"
+timed = true
+instrumented = true
+
+[[pipeline.stages]]
+type = "postprocess"
+threshold = 0.5
+output_type = "binary"

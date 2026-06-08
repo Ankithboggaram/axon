@@ -1,0 +1,44 @@
+[workspace]
+
+[package]
+name = "axon-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+toml = "0.8"
+ndarray = "0.17"
+arrayvec = "0.7"
+pipex = { git = "https://github.com/Ankithboggaram/pipex.git", tag = "v0.2.0" }
+
+[dependencies.axon]
+path = ".."
+
+# Fuzz targets must be compiled with opt-level > 0 for the sanitizer
+# instrumentation to work correctly. Debug info helps with crash reports.
+[profile.release]
+debug = true
+
+[[bin]]
+name = "config_parsing"
+path = "fuzz_targets/config_parsing.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "pipeline_construction"
+path = "fuzz_targets/pipeline_construction.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "tensor_shapes"
+path = "fuzz_targets/tensor_shapes.rs"
+test = false
+doc = false

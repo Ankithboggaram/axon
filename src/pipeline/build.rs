@@ -204,7 +204,7 @@ pub fn build_scratchpad(config: &Config) -> anyhow::Result<InferenceScratchpad> 
 }
 
 /// Checks that the stage sequence is structurally valid before building.
-pub(crate) fn validate_ordering(stages: &[StageConfig]) -> anyhow::Result<()> {
+pub fn validate_ordering(stages: &[StageConfig]) -> anyhow::Result<()> {
     let Some(infer_pos) = stages
         .iter()
         .position(|s| matches!(s, StageConfig::Infer { .. }))
