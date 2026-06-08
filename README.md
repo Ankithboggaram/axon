@@ -148,6 +148,8 @@ host = "0.0.0.0"
 port = 50051
 stream_poll_interval_ms = 1    # polling interval for streaming RPCs
 request_timeout_ms = 5000      # requests exceeding this are cancelled
+pool_size = 4                  # pipeline pool slots (default: logical CPU count)
+session_pool_size = 4          # ONNX session pool slots (default: logical CPU count)
 
 [backend]
 type = "onnx_runtime"

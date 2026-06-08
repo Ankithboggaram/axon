@@ -1,11 +1,10 @@
 //! ONNX Runtime inference backend, in-process with no network hop.
 
-use std::sync::Mutex;
-
 use async_trait::async_trait;
 use ort::session::Session;
 use ort::session::builder::GraphOptimizationLevel;
 use ort::value::TensorRef;
+use parking_lot::Mutex;
 
 use crate::backend::Backend;
 use crate::error::BackendError;
@@ -13,20 +12,35 @@ use crate::types::{NamedTensorRef, OutputBuffer};
 
 /// In-process inference backend powered by ONNX Runtime.
 ///
-/// The model is loaded and optimized once at startup. Each call to `run`
-/// executes on the calling thread with no serialization or network overhead.
+/// Sessions are pooled: each concurrent call to [`Backend::run`] pops a session
+/// from the pool, runs inference with exclusive ownership, then returns it. When
+/// all pool slots are in use an overflow session is created for that call only.
 pub struct OnnxBackend {
-    // Mutex because Session::run requires &mut self; the trait contract is &self.
-    session: Mutex<Session>,
+    sessions: Mutex<Vec<Session>>,
+    model_path: String,
+    capacity: usize,
 }
 
 impl OnnxBackend {
-    /// Loads an ONNX model from disk and prepares it for inference.
+    /// Loads `pool_size` ONNX sessions from disk and prepares them for inference.
     ///
-    /// Applies level-3 graph optimization at load time so the cost is paid
-    /// once at startup rather than on the first request.
-    pub fn new(model_path: &str) -> Result<Self, BackendError> {
-        let session = Session::builder()
+    /// All sessions share the same model and optimization level. Graph optimization
+    /// is applied once per session at load time so the cost is not paid on requests.
+    pub fn new(model_path: &str, pool_size: usize) -> Result<Self, BackendError> {
+        let capacity = pool_size.max(1);
+        let mut sessions = Vec::with_capacity(capacity);
+        for _ in 0..capacity {
+            sessions.push(Self::create_session(model_path)?);
+        }
+        Ok(Self {
+            sessions: Mutex::new(sessions),
+            model_path: model_path.to_owned(),
+            capacity,
+        })
+    }
+
+    fn create_session(model_path: &str) -> Result<Session, BackendError> {
+        Session::builder()
             .map_err(|e| {
                 BackendError::SessionCreation(format!("failed to create session builder: {e}"))
             })?
@@ -39,22 +53,20 @@ impl OnnxBackend {
                 BackendError::SessionCreation(format!(
                     "failed to load model from {model_path}: {e}"
                 ))
-            })?;
-        Ok(Self {
-            session: Mutex::new(session),
-        })
+            })
     }
 }
 
 impl std::fmt::Debug for OnnxBackend {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OnnxBackend").finish_non_exhaustive()
+        f.debug_struct("OnnxBackend")
+            .field("capacity", &self.capacity)
+            .finish_non_exhaustive()
     }
 }
 
 #[async_trait]
 impl Backend for OnnxBackend {
-    #[allow(clippy::unwrap_used)] // Mutex::lock() panics only on poison, which means a prior panic already occurred
     async fn run(
         &self,
         inputs: &[NamedTensorRef<'_>],
@@ -73,8 +85,15 @@ impl Backend for OnnxBackend {
             })
             .collect::<Result<Vec<_>, BackendError>>()?;
 
-        // Guard must outlive ort_outputs, which borrows from the session.
-        let mut session = self.session.lock().unwrap();
+        // Pop a session from the pool, releasing the lock before inference so
+        // other threads can acquire their own session concurrently.
+        let maybe_session = self.sessions.lock().pop();
+        let mut session = match maybe_session {
+            Some(s) => s,
+            None => Self::create_session(&self.model_path)?,
+        };
+
+        // ort_outputs may borrow from session, so session must outlive it.
         let ort_outputs = session
             .run(ort_inputs)
             .map_err(|e| BackendError::InferenceFailed(format!("inference failed: {e}")))?;
@@ -86,6 +105,15 @@ impl Backend for OnnxBackend {
                 BackendError::InferenceFailed(format!("failed to extract output {i}: {e}"))
             })?;
             out_buf.data.assign(&view);
+        }
+        // SessionOutputs borrows from session; drop it explicitly before returning
+        // session to the pool so the borrow ends before the move.
+        drop(ort_outputs);
+
+        // Return session to pool if capacity has not been reached.
+        let mut pool = self.sessions.lock();
+        if pool.len() < self.capacity {
+            pool.push(session);
         }
 
         Ok(())

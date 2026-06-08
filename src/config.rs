@@ -61,6 +61,10 @@ pub struct GrpcConfig {
     /// Defaults to the number of logical CPUs if not set.
     #[serde(default)]
     pub pool_size: Option<usize>,
+    /// Number of ONNX Runtime sessions in the backend pool.
+    /// Defaults to the number of logical CPUs if not set.
+    #[serde(default)]
+    pub session_pool_size: Option<usize>,
 }
 
 /// Inference backend settings.
@@ -304,6 +308,13 @@ impl Config {
             });
         }
 
+        if self.grpc.session_pool_size == Some(0) {
+            return Err(ConfigError::Invalid {
+                field: "grpc.session_pool_size",
+                reason: "must not be 0; omit the field to use the default".into(),
+            });
+        }
+
         if self.store.health_check_interval_secs == Some(0) {
             return Err(ConfigError::Invalid {
                 field: "store.health_check_interval_secs",
@@ -371,6 +382,7 @@ mod tests {
                 stream_poll_interval_ms: 100,
                 request_timeout_ms: 5000,
                 pool_size: None,
+                session_pool_size: None,
             },
             backend: BackendConfig {
                 backend_type: BackendType::OnnxRuntime,
@@ -470,6 +482,20 @@ mod tests {
         let mut cfg = valid_config();
         cfg.store.port = 0;
         assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_zero_session_pool_size() {
+        let mut cfg = valid_config();
+        cfg.grpc.session_pool_size = Some(0);
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn accepts_explicit_session_pool_size() {
+        let mut cfg = valid_config();
+        cfg.grpc.session_pool_size = Some(4);
+        assert!(cfg.validate().is_ok());
     }
 
     #[test]

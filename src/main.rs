@@ -186,10 +186,19 @@ async fn main() -> anyhow::Result<()> {
                 Err(e) => tracing::warn!("could not generate Triton config: {e}"),
             }
 
+            let session_pool_size = config.grpc.session_pool_size.unwrap_or_else(|| {
+                std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(4)
+            });
+
             let backend: Arc<dyn Backend> = match config.backend.backend_type {
-                BackendType::OnnxRuntime => Arc::new(OnnxBackend::new(&model.local_path)?),
+                BackendType::OnnxRuntime => {
+                    Arc::new(OnnxBackend::new(&model.local_path, session_pool_size)?)
+                }
                 BackendType::Triton => unreachable!("Triton rejected by Config::validate"),
             };
+            info!(session_pool_size, "session pool ready");
 
             let (first_pipeline, stage_metrics) = build(&config, Arc::clone(&backend))?;
 
