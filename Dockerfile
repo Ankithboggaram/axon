@@ -28,7 +28,7 @@ WORKDIR /app
 
 COPY --from=builder /app/target/release/axon ./axon
 COPY --from=builder /app/lib ./lib
-COPY config.toml ./config.toml
+COPY examples/config.toml ./config.toml
 
 ENV LD_LIBRARY_PATH=/app/lib
 
