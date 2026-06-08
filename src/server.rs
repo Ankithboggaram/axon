@@ -7,7 +7,7 @@
 //!
 //! gRPC I/O runs on the tokio multi-thread runtime. The inference pipeline is
 //! synchronous: stages mutate a scratchpad in place with no await points. The
-//! two meet in [`InferenceServer::run_inference`], which calls
+//! two meet in `InferenceServer::run_inference`, which calls
 //! `tokio::task::block_in_place` before entering the pipeline. This tells
 //! tokio the current thread is about to block, so the scheduler can move other
 //! tasks to different threads rather than stalling the executor.
