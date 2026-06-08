@@ -54,7 +54,6 @@ impl FeatureStore for RedisStore {
         Ok(())
     }
 
-    #[allow(clippy::expect_used)] // scratchpad is always C-order; non-contiguous layout is a construction bug
     async fn fetch_features(
         &self,
         entity_id: &str,
@@ -96,9 +95,10 @@ impl FeatureStore for RedisStore {
             });
         }
 
-        dest.as_slice_mut()
-            .expect("contiguous array")
-            .copy_from_slice(&values);
+        // scratchpad is always C-order; non-contiguous layout is a construction bug
+        #[allow(clippy::expect_used)]
+        let slice = dest.as_slice_mut().expect("contiguous array");
+        slice.copy_from_slice(&values);
 
         Ok(FetchResult::Hit)
     }

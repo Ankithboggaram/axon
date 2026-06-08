@@ -15,8 +15,7 @@ use crate::error::ServeError;
 /// Construct once at startup and share via `Arc<Metrics>`. The individual
 /// metric types are internally thread-safe, so no external locking required.
 pub struct Metrics {
-    /// Prometheus registry that all metrics are registered with.
-    pub registry: Registry,
+    registry: Registry,
 
     /// Total inference requests, labelled by RPC name and outcome.
     pub requests_total: CounterVec,
@@ -71,7 +70,7 @@ impl Metrics {
         let store_fetch_duration_seconds = Histogram::with_opts(
             HistogramOpts::new(
                 "axon_store_fetch_duration_seconds",
-                "Redis feature fetch latency in seconds.",
+                "Feature store fetch latency in seconds.",
             )
             .buckets(vec![0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05]),
         )

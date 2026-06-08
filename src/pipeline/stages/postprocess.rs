@@ -69,7 +69,6 @@ mod tests {
     fn ctx_with_output(data: ArrayD<f32>) -> InferenceScratchpad {
         InferenceScratchpad {
             entity_id: ArrayString::new(),
-            request_id: ArrayString::new(),
             timestamp_ms: 0,
             input: ArrayD::zeros(IxDyn(&[1])),
             outputs: vec![OutputBuffer {
@@ -83,7 +82,6 @@ mod tests {
     fn ctx_no_outputs() -> InferenceScratchpad {
         InferenceScratchpad {
             entity_id: ArrayString::new(),
-            request_id: ArrayString::new(),
             timestamp_ms: 0,
             input: ArrayD::zeros(IxDyn(&[1])),
             outputs: Box::new([]),

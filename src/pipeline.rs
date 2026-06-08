@@ -10,7 +10,7 @@ pub mod build;
 pub mod pool;
 pub mod stages;
 
-/// Maximum byte length for entity_id and request_id.
+/// Maximum byte length for entity_id values.
 ///
 /// 128 bytes covers UUIDs (36 bytes), compound identifiers, and symbol names
 /// with room to spare. The server layer rejects IDs that exceed this limit.
@@ -21,8 +21,6 @@ pub const MAX_ID_LEN: usize = 128;
 pub struct InferenceScratchpad {
     /// Entity identifier, stack-allocated to avoid heap allocation on the hot path.
     pub entity_id: ArrayString<MAX_ID_LEN>,
-    /// Request identifier, stack-allocated to avoid heap allocation on the hot path.
-    pub request_id: ArrayString<MAX_ID_LEN>,
     /// Unix timestamp in milliseconds when the request was received.
     pub timestamp_ms: i64,
     /// Input tensor, pre-allocated at startup to the shape from model_schema.inputs.
@@ -35,7 +33,6 @@ pub struct InferenceScratchpad {
 impl Scratchpad for InferenceScratchpad {
     fn reset(&mut self) {
         self.entity_id.clear();
-        self.request_id.clear();
         self.timestamp_ms = 0;
         // Protective zero: prevents stale data leaking if the server writes
         // fewer features than expected.

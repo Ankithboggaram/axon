@@ -335,7 +335,7 @@ The same pattern applies for:
 
 ## Roadmap
 
-- [ ] OnnxBackend session pool for concurrent inference
+- [x] OnnxBackend session pool for concurrent inference
 - [ ] Triton Inference Server backend
 - [ ] Event-driven streaming via Redis pub/sub (replaces polling)
 - [ ] Add additional pipeline stages like `drift_detect`, `audit` and `argmax`

@@ -64,7 +64,6 @@ mod tests {
     fn ctx_with_output(output_shape: &[usize]) -> InferenceScratchpad {
         InferenceScratchpad {
             entity_id: ArrayString::new(),
-            request_id: ArrayString::new(),
             timestamp_ms: 0,
             input: ArrayD::zeros(IxDyn(&[3])),
             outputs: vec![OutputBuffer {

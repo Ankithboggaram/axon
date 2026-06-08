@@ -56,17 +56,6 @@ pub fn build(
                 expected_shape,
                 observability,
             } => {
-                if expected_shape.is_empty() {
-                    anyhow::bail!("validate stage: expected_shape must not be empty");
-                }
-                for &dim in expected_shape {
-                    if dim <= 0 {
-                        anyhow::bail!(
-                            "validate stage: all dimensions must be positive, got {}",
-                            dim
-                        );
-                    }
-                }
                 let shape: Box<[usize]> = expected_shape
                     .iter()
                     .map(|&d| d as usize)
@@ -208,7 +197,6 @@ pub fn build_scratchpad(config: &Config) -> anyhow::Result<InferenceScratchpad> 
 
     Ok(InferenceScratchpad {
         entity_id: ArrayString::new(),
-        request_id: ArrayString::new(),
         timestamp_ms: 0,
         input: ArrayD::zeros(IxDyn(&input_shape)),
         outputs,

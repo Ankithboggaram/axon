@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use futures_util::StreamExt as _;
+use tokio::io::AsyncWriteExt as _;
 
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -107,10 +108,10 @@ impl MlflowClient {
     /// Streams directly to disk to avoid buffering the entire model in memory.
     async fn download_artifact(&self, name: &str, version: &str) -> Result<PathBuf, RegistryError> {
         let dir = std::env::temp_dir().join("axon");
-        std::fs::create_dir_all(&dir)?;
+        tokio::fs::create_dir_all(&dir).await?;
 
         let path = dir.join(format!("{name}_v{version}.onnx"));
-        let mut file = std::fs::File::create(&path)?;
+        let mut file = tokio::fs::File::create(&path).await?;
 
         let mut stream = self
             .get_artifact(name, version, "model.onnx")
@@ -120,7 +121,7 @@ impl MlflowClient {
         while let Some(chunk) = stream.next().await {
             let chunk =
                 chunk.map_err(|e| RegistryError::Request(format!("artifact stream error: {e}")))?;
-            std::io::Write::write_all(&mut file, &chunk)?;
+            file.write_all(&chunk).await?;
         }
 
         Ok(path)

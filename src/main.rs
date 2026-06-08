@@ -95,7 +95,6 @@ enum Command {
     },
 }
 
-#[allow(clippy::expect_used)] // pool factory closures use FnMut() -> T with no error channel
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -186,11 +185,10 @@ async fn main() -> anyhow::Result<()> {
                 Err(e) => tracing::warn!("could not generate Triton config: {e}"),
             }
 
-            let session_pool_size = config.grpc.session_pool_size.unwrap_or_else(|| {
-                std::thread::available_parallelism()
-                    .map(|n| n.get())
-                    .unwrap_or(4)
-            });
+            let session_pool_size = config
+                .grpc
+                .session_pool_size
+                .unwrap_or_else(default_pool_size);
 
             let backend: Arc<dyn Backend> = match config.backend.backend_type {
                 BackendType::OnnxRuntime => {
@@ -214,30 +212,34 @@ async fn main() -> anyhow::Result<()> {
                 .map_err(|e| anyhow::anyhow!("startup readiness check failed: {e}"))?;
             info!("feature store reachable");
 
-            let pool_size = config.grpc.pool_size.unwrap_or_else(|| {
-                std::thread::available_parallelism()
-                    .map(|n| n.get())
-                    .unwrap_or(4)
-            });
+            let pool_size = config.grpc.pool_size.unwrap_or_else(default_pool_size);
 
             // Scratchpad pool: pre-allocated tensor buffers, one per concurrent request.
             // ScratchpadPool pre-populates to capacity and resets on return, so no
             // allocation occurs on the hot path.
             let config_s = config.clone();
-            let scratchpad_pool = Arc::new(ScratchpadPool::new(pool_size, move || {
-                build_scratchpad(&config_s).expect("scratchpad pool factory failed")
-            }));
+            // FnMut() -> T has no error channel; expect is the only option here.
+            #[allow(clippy::expect_used)]
+            let scratchpad_factory =
+                move || build_scratchpad(&config_s).expect("scratchpad pool factory failed");
+            let scratchpad_pool = Arc::new(ScratchpadPool::new(pool_size, scratchpad_factory));
 
             // Pipeline pool: one pipeline per concurrent request slot.
             // first_pipeline carries the registered StageMetrics so Prometheus sees
             // real traffic. Additional slots carry unregistered handles.
             let config_p = config.clone();
             let backend_p = Arc::clone(&backend);
-            let pipeline_pool = Arc::new(PipelinePool::new(first_pipeline, pool_size, move || {
+            #[allow(clippy::expect_used)]
+            let pipeline_factory = move || {
                 build(&config_p, Arc::clone(&backend_p))
                     .expect("pipeline pool factory failed")
                     .0
-            }));
+            };
+            let pipeline_pool = Arc::new(PipelinePool::new(
+                first_pipeline,
+                pool_size,
+                pipeline_factory,
+            ));
 
             info!(pool_size, "pipeline pool ready");
 
@@ -314,6 +316,12 @@ fn report_config_error(path: &str, e: crate::error::ConfigError) -> anyhow::Erro
             "config file '{path}' failed validation\n  field:  {field}\n  reason: {reason}\n  hint:   run `axon init` to generate a valid starter config"
         ),
     }
+}
+
+fn default_pool_size() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
 }
 
 fn init_tracing() {
@@ -396,7 +404,10 @@ async fn serve_metrics(metrics: Arc<Metrics>, port: u16) {
 
         let metrics = Arc::clone(&metrics);
         tokio::spawn(async move {
-            let body = metrics.render().unwrap_or_default();
+            let body = metrics.render().unwrap_or_else(|e| {
+                tracing::warn!("metrics encode failed: {e}");
+                String::new()
+            });
             let response = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: text/plain; version=0.0.4\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                 body.len(),

@@ -73,12 +73,6 @@ pub struct BackendConfig {
     /// Which backend implementation to use.
     #[serde(rename = "type")]
     pub backend_type: BackendType,
-    /// Model name registered in Triton. Required for the Triton backend only.
-    pub model: Option<String>,
-    /// Triton server host. Required for the Triton backend only.
-    pub host: Option<String>,
-    /// Triton server port. Required for the Triton backend only.
-    pub port: Option<u16>,
 }
 
 /// Model registry connection settings.
@@ -152,8 +146,6 @@ pub struct StageObservability {
 }
 
 /// Each variant carries only the parameters relevant to that stage type.
-///
-// TODO: Implement drift_detect, audit, argmax stages.
 #[non_exhaustive]
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -355,6 +347,23 @@ impl Config {
                     reason: "must not be 0 (division by zero)".into(),
                 });
             }
+
+            if let StageConfig::Validate { expected_shape, .. } = stage {
+                if expected_shape.is_empty() {
+                    return Err(ConfigError::Invalid {
+                        field: "pipeline.stages[validate].expected_shape",
+                        reason: "must not be empty".into(),
+                    });
+                }
+                for &dim in expected_shape {
+                    if dim <= 0 {
+                        return Err(ConfigError::Invalid {
+                            field: "pipeline.stages[validate].expected_shape",
+                            reason: format!("all dimensions must be positive, got {dim}"),
+                        });
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -386,9 +395,6 @@ mod tests {
             },
             backend: BackendConfig {
                 backend_type: BackendType::OnnxRuntime,
-                model: None,
-                host: None,
-                port: None,
             },
             registry: RegistryConfig {
                 registry_type: RegistryType::Mlflow,

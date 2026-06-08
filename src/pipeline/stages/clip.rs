@@ -38,7 +38,6 @@ mod tests {
     fn ctx(input: ndarray::ArrayD<f32>) -> InferenceScratchpad {
         InferenceScratchpad {
             entity_id: ArrayString::new(),
-            request_id: ArrayString::new(),
             timestamp_ms: 0,
             input,
             outputs: Box::new([]),
