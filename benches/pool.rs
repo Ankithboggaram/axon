@@ -19,7 +19,7 @@ use std::sync::Arc;
 use pipex::pool::ScratchpadPool;
 
 use axon::config::{
-    BackendConfig, BackendType, Config, GrpcConfig, MetricsConfig, ModelSchemaConfig,
+    BackendConfig, BackendType, Config, DeviceConfig, GrpcConfig, MetricsConfig, ModelSchemaConfig,
     PipelineConfig, RegistryConfig, RegistryType, StageConfig, StageObservability, StoreConfig,
     StoreType, TensorSpec,
 };
@@ -50,6 +50,7 @@ fn mnist_config() -> Config {
         },
         backend: BackendConfig {
             backend_type: BackendType::OnnxRuntime,
+            device: DeviceConfig::Cpu,
         },
         registry: RegistryConfig {
             registry_type: RegistryType::Mlflow,
@@ -117,8 +118,9 @@ fn pipeline_pool_acquire_release(bencher: divan::Bencher) {
     use axon::pipeline::pool::PipelinePool;
 
     let config = mnist_config();
-    let backend = Arc::new(OnnxBackend::new("tests/fixtures/mnist-8.onnx", 1).unwrap())
-        as Arc<dyn axon::backend::Backend>;
+    let backend =
+        Arc::new(OnnxBackend::new("tests/fixtures/mnist-8.onnx", 1, DeviceConfig::Cpu).unwrap())
+            as Arc<dyn axon::backend::Backend>;
     let (first, _) = build(&config, Arc::clone(&backend)).unwrap();
     let pool = Arc::new(PipelinePool::new(first, 4, {
         let config = config.clone();

@@ -177,12 +177,14 @@ async fn main() -> anyhow::Result<()> {
                 .unwrap_or_else(default_pool_size);
 
             let backend: Arc<dyn Backend> = match config.backend.backend_type {
-                BackendType::OnnxRuntime => {
-                    Arc::new(OnnxBackend::new(&model.local_path, session_pool_size)?)
-                }
+                BackendType::OnnxRuntime => Arc::new(OnnxBackend::new(
+                    &model.local_path,
+                    session_pool_size,
+                    config.backend.device.clone(),
+                )?),
                 _ => unreachable!("unsupported backend rejected by Config::validate"),
             };
-            info!(session_pool_size, "session pool ready");
+            info!(session_pool_size, device = ?config.backend.device, "session pool ready");
 
             let (first_pipeline, stage_metrics) = build(&config, Arc::clone(&backend))?;
 

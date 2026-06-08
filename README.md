@@ -153,6 +153,7 @@ session_pool_size = 4          # ONNX session pool slots (default: logical CPU c
 
 [backend]
 type = "onnx_runtime"
+device = "cpu"             # "cpu" | "coreml" (macOS) | "cuda" | "tensorrt"
 
 [registry]
 type          = "mlflow"

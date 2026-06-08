@@ -15,7 +15,7 @@ use ndarray::{ArrayD, IxDyn};
 use axon::backend::Backend;
 use axon::backend::onnx::OnnxBackend;
 use axon::config::{
-    BackendConfig, BackendType, Config, GrpcConfig, MetricsConfig, ModelSchemaConfig,
+    BackendConfig, BackendType, Config, DeviceConfig, GrpcConfig, MetricsConfig, ModelSchemaConfig,
     PipelineConfig, RegistryConfig, RegistryType, StageConfig, StageObservability, StoreConfig,
     StoreType, TensorSpec,
 };
@@ -49,6 +49,7 @@ fn mnist_config() -> Config {
         },
         backend: BackendConfig {
             backend_type: BackendType::OnnxRuntime,
+            device: DeviceConfig::Cpu,
         },
         registry: RegistryConfig {
             registry_type: RegistryType::Mlflow,
@@ -85,12 +86,12 @@ fn mnist_config() -> Config {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn backend_loads_model() {
-    OnnxBackend::new(MODEL, 1).expect("failed to load MNIST model");
+    OnnxBackend::new(MODEL, 1, DeviceConfig::Cpu).expect("failed to load MNIST model");
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn backend_produces_correct_output_shape() {
-    let backend = OnnxBackend::new(MODEL, 1).unwrap();
+    let backend = OnnxBackend::new(MODEL, 1, DeviceConfig::Cpu).unwrap();
     let input = ArrayD::<f32>::zeros(IxDyn(&[1, 1, 28, 28]));
     let inputs = [NamedTensorRef {
         name: "Input3",
@@ -108,7 +109,7 @@ async fn backend_produces_correct_output_shape() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn backend_output_is_finite() {
-    let backend = OnnxBackend::new(MODEL, 1).unwrap();
+    let backend = OnnxBackend::new(MODEL, 1, DeviceConfig::Cpu).unwrap();
     let input = ArrayD::<f32>::zeros(IxDyn(&[1, 1, 28, 28]));
     let inputs = [NamedTensorRef {
         name: "Input3",
@@ -126,7 +127,7 @@ async fn backend_output_is_finite() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn session_pool_handles_concurrent_requests() {
-    let backend = Arc::new(OnnxBackend::new(MODEL, 2).unwrap());
+    let backend = Arc::new(OnnxBackend::new(MODEL, 2, DeviceConfig::Cpu).unwrap());
 
     // 8 concurrent requests against a pool of 2 — 6 must go through overflow sessions.
     let tasks: Vec<_> = (0..8)
@@ -156,7 +157,8 @@ async fn session_pool_handles_concurrent_requests() {
 #[tokio::test(flavor = "multi_thread")]
 async fn pipeline_runs_end_to_end() {
     let config = mnist_config();
-    let backend = Arc::new(OnnxBackend::new(MODEL, 1).unwrap()) as Arc<dyn axon::backend::Backend>;
+    let backend = Arc::new(OnnxBackend::new(MODEL, 1, DeviceConfig::Cpu).unwrap())
+        as Arc<dyn axon::backend::Backend>;
     let (mut pipeline, _metrics) = build(&config, backend).unwrap();
     let mut ctx = build_scratchpad(&config).unwrap();
 
@@ -171,7 +173,8 @@ async fn pipeline_runs_end_to_end() {
 #[tokio::test(flavor = "multi_thread")]
 async fn pipeline_output_changes_with_different_inputs() {
     let config = mnist_config();
-    let backend = Arc::new(OnnxBackend::new(MODEL, 1).unwrap()) as Arc<dyn axon::backend::Backend>;
+    let backend = Arc::new(OnnxBackend::new(MODEL, 1, DeviceConfig::Cpu).unwrap())
+        as Arc<dyn axon::backend::Backend>;
     let (mut pipeline, _) = build(&config, Arc::clone(&backend)).unwrap();
 
     let mut ctx = build_scratchpad(&config).unwrap();
@@ -203,7 +206,7 @@ async fn model_classifies_feature_store_vector_correctly() {
         .collect();
     assert_eq!(pixels.len(), 784, "feature vector must be 784 elements");
 
-    let backend = OnnxBackend::new(MODEL, 1).unwrap();
+    let backend = OnnxBackend::new(MODEL, 1, DeviceConfig::Cpu).unwrap();
     let input = ArrayD::from_shape_vec(IxDyn(&[1, 1, 28, 28]), pixels).unwrap();
     let inputs = [NamedTensorRef {
         name: "Input3",
@@ -229,7 +232,7 @@ async fn model_classifies_png_image_correctly() {
 
     let pixels: Vec<f32> = img.pixels().map(|p| p.0[0] as f32).collect();
 
-    let backend = OnnxBackend::new(MODEL, 1).unwrap();
+    let backend = OnnxBackend::new(MODEL, 1, DeviceConfig::Cpu).unwrap();
     let input = ArrayD::from_shape_vec(IxDyn(&[1, 1, 28, 28]), pixels).unwrap();
     let inputs = [NamedTensorRef {
         name: "Input3",

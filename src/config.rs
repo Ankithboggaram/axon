@@ -4,6 +4,28 @@ use serde::Deserialize;
 
 use crate::error::ConfigError;
 
+/// Hardware device used for model inference.
+///
+/// Axon maps this to an ONNX Runtime execution provider. Non-CPU providers
+/// fail at session creation if the required runtime libraries are not present;
+/// they never silently fall back to CPU.
+#[non_exhaustive]
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeviceConfig {
+    /// CPU inference via ONNX Runtime's CPU execution provider. Default.
+    #[default]
+    Cpu,
+    /// Apple Neural Engine / GPU via CoreML. macOS 10.15+ only.
+    #[serde(rename = "coreml")]
+    CoreMl,
+    /// NVIDIA GPU via CUDA. Requires CUDA and cuDNN runtime libraries.
+    Cuda,
+    /// NVIDIA GPU via TensorRT. Requires CUDA, cuDNN, and TensorRT libraries.
+    #[serde(rename = "tensorrt")]
+    TensorRt,
+}
+
 /// Inference backend implementation.
 #[non_exhaustive]
 #[derive(Clone, Debug, Deserialize)]
@@ -73,6 +95,13 @@ pub struct BackendConfig {
     /// Which backend implementation to use.
     #[serde(rename = "type")]
     pub backend_type: BackendType,
+    /// Hardware device for inference. Defaults to `"cpu"`.
+    ///
+    /// Valid values: `"cpu"`, `"coreml"`, `"cuda"`, `"tensorrt"`.
+    /// Non-CPU devices fail fast at startup if the required runtime libraries
+    /// are not present on the host.
+    #[serde(default)]
+    pub device: DeviceConfig,
 }
 
 /// Model registry connection settings.
@@ -395,6 +424,7 @@ mod tests {
             },
             backend: BackendConfig {
                 backend_type: BackendType::OnnxRuntime,
+                device: DeviceConfig::Cpu,
             },
             registry: RegistryConfig {
                 registry_type: RegistryType::Mlflow,
@@ -568,5 +598,87 @@ mod tests {
             },
         ];
         assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn device_defaults_to_cpu_when_omitted() {
+        let toml = r#"
+            [grpc]
+            host = "0.0.0.0"
+            port = 50051
+            stream_poll_interval_ms = 100
+            request_timeout_ms = 5000
+
+            [backend]
+            type = "onnx_runtime"
+
+            [registry]
+            type = "mlflow"
+            uri = "http://localhost:5000"
+            model_name = "m"
+            model_version = "1"
+
+            [store]
+            type = "redis"
+            host = "localhost"
+            port = 6379
+
+            [metrics]
+            port = 9090
+
+            [[model_schema.inputs]]
+            name = "x"
+            dtype = "float32"
+            shape = [1, 4]
+
+            [[model_schema.outputs]]
+            name = "y"
+            dtype = "float32"
+            shape = [1, 1]
+
+            [[pipeline.stages]]
+            type = "infer"
+        "#;
+        let cfg: Config = toml::from_str(toml).unwrap();
+        assert!(matches!(cfg.backend.device, DeviceConfig::Cpu));
+    }
+
+    #[test]
+    fn device_cpu_parses() {
+        let toml = r#"type = "onnx_runtime"
+device = "cpu""#;
+        let cfg: BackendConfig = toml::from_str(toml).unwrap();
+        assert!(matches!(cfg.device, DeviceConfig::Cpu));
+    }
+
+    #[test]
+    fn device_coreml_parses() {
+        let toml = r#"type = "onnx_runtime"
+device = "coreml""#;
+        let cfg: BackendConfig = toml::from_str(toml).unwrap();
+        assert!(matches!(cfg.device, DeviceConfig::CoreMl));
+    }
+
+    #[test]
+    fn device_cuda_parses() {
+        let toml = r#"type = "onnx_runtime"
+device = "cuda""#;
+        let cfg: BackendConfig = toml::from_str(toml).unwrap();
+        assert!(matches!(cfg.device, DeviceConfig::Cuda));
+    }
+
+    #[test]
+    fn device_tensorrt_parses() {
+        let toml = r#"type = "onnx_runtime"
+device = "tensorrt""#;
+        let cfg: BackendConfig = toml::from_str(toml).unwrap();
+        assert!(matches!(cfg.device, DeviceConfig::TensorRt));
+    }
+
+    #[test]
+    fn device_unknown_value_rejected() {
+        let toml = r#"type = "onnx_runtime"
+device = "vulkan""#;
+        assert!(toml::from_str::<BackendConfig>(toml).is_err());
     }
 }

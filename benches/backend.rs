@@ -15,15 +15,16 @@ use ndarray::{ArrayD, IxDyn};
 
 use axon::backend::Backend;
 use axon::backend::onnx::OnnxBackend;
+use axon::config::DeviceConfig;
 use axon::types::{NamedTensorRef, OutputBuffer};
 
 const MODEL: &str = "tests/fixtures/mnist-8.onnx";
 
 // Loaded once at process start; session pool is the only shared mutable state.
 static BACKEND_POOL_1: LazyLock<Arc<OnnxBackend>> =
-    LazyLock::new(|| Arc::new(OnnxBackend::new(MODEL, 1).unwrap()));
+    LazyLock::new(|| Arc::new(OnnxBackend::new(MODEL, 1, DeviceConfig::Cpu).unwrap()));
 static BACKEND_POOL_4: LazyLock<Arc<OnnxBackend>> =
-    LazyLock::new(|| Arc::new(OnnxBackend::new(MODEL, 4).unwrap()));
+    LazyLock::new(|| Arc::new(OnnxBackend::new(MODEL, 4, DeviceConfig::Cpu).unwrap()));
 
 fn main() {
     divan::main();

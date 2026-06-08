@@ -1,12 +1,14 @@
 //! ONNX Runtime inference backend, in-process with no network hop.
 
 use async_trait::async_trait;
+use ort::ep;
 use ort::session::Session;
 use ort::session::builder::GraphOptimizationLevel;
 use ort::value::TensorRef;
 use parking_lot::Mutex;
 
 use crate::backend::Backend;
+use crate::config::DeviceConfig;
 use crate::error::BackendError;
 use crate::types::{NamedTensorRef, OutputBuffer};
 
@@ -18,6 +20,7 @@ use crate::types::{NamedTensorRef, OutputBuffer};
 pub struct OnnxBackend {
     sessions: Mutex<Vec<Session>>,
     model_path: String,
+    device: DeviceConfig,
     capacity: usize,
 }
 
@@ -26,40 +29,66 @@ impl OnnxBackend {
     ///
     /// All sessions share the same model and optimization level. Graph optimization
     /// is applied once per session at load time so the cost is not paid on requests.
-    pub fn new(model_path: &str, pool_size: usize) -> Result<Self, BackendError> {
+    ///
+    /// Returns [`BackendError::SessionCreation`] if the requested device is not
+    /// available on this host (e.g. `Cuda` without CUDA libraries installed).
+    pub fn new(
+        model_path: &str,
+        pool_size: usize,
+        device: DeviceConfig,
+    ) -> Result<Self, BackendError> {
         let capacity = pool_size.max(1);
         let mut sessions = Vec::with_capacity(capacity);
         for _ in 0..capacity {
-            sessions.push(Self::create_session(model_path)?);
+            sessions.push(Self::create_session(model_path, &device)?);
         }
         Ok(Self {
             sessions: Mutex::new(sessions),
             model_path: model_path.to_owned(),
+            device,
             capacity,
         })
     }
 
-    fn create_session(model_path: &str) -> Result<Session, BackendError> {
-        Session::builder()
+    fn create_session(model_path: &str, device: &DeviceConfig) -> Result<Session, BackendError> {
+        let builder = Session::builder()
             .map_err(|e| {
                 BackendError::SessionCreation(format!("failed to create session builder: {e}"))
             })?
             .with_optimization_level(GraphOptimizationLevel::Level3)
             .map_err(|e| {
                 BackendError::SessionCreation(format!("failed to set optimization level: {e}"))
-            })?
-            .commit_from_file(model_path)
-            .map_err(|e| {
-                BackendError::SessionCreation(format!(
-                    "failed to load model from {model_path}: {e}"
-                ))
-            })
+            })?;
+
+        // For non-CPU devices, error_on_failure() ensures a clear startup error
+        // rather than a silent fallback to CPU that would be invisible to operators.
+        let mut builder = match device {
+            DeviceConfig::Cpu => builder,
+            DeviceConfig::CoreMl => builder
+                .with_execution_providers([ep::CoreML::default().build().error_on_failure()])
+                .map_err(|e| {
+                    BackendError::SessionCreation(format!("CoreML EP unavailable: {e}"))
+                })?,
+            DeviceConfig::Cuda => builder
+                .with_execution_providers([ep::CUDA::default().build().error_on_failure()])
+                .map_err(|e| BackendError::SessionCreation(format!("CUDA EP unavailable: {e}")))?,
+            DeviceConfig::TensorRt => builder
+                .with_execution_providers([ep::TensorRT::default().build().error_on_failure()])
+                .map_err(|e| {
+                    BackendError::SessionCreation(format!("TensorRT EP unavailable: {e}"))
+                })?,
+        };
+
+        builder.commit_from_file(model_path).map_err(|e| {
+            BackendError::SessionCreation(format!("failed to load model from {model_path}: {e}"))
+        })
     }
 }
 
 impl std::fmt::Debug for OnnxBackend {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OnnxBackend")
+            .field("device", &self.device)
             .field("capacity", &self.capacity)
             .finish_non_exhaustive()
     }
@@ -90,7 +119,7 @@ impl Backend for OnnxBackend {
         let maybe_session = self.sessions.lock().pop();
         let mut session = match maybe_session {
             Some(s) => s,
-            None => Self::create_session(&self.model_path)?,
+            None => Self::create_session(&self.model_path, &self.device)?,
         };
 
         // ort_outputs may borrow from session, so session must outlive it.
@@ -117,5 +146,30 @@ impl Backend for OnnxBackend {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MODEL: &str = "tests/fixtures/mnist-8.onnx";
+
+    #[test]
+    fn cpu_device_creates_session() {
+        OnnxBackend::new(MODEL, 1, DeviceConfig::Cpu).unwrap();
+    }
+
+    #[test]
+    fn pool_size_respected() {
+        let backend = OnnxBackend::new(MODEL, 3, DeviceConfig::Cpu).unwrap();
+        assert_eq!(backend.capacity, 3);
+        assert_eq!(backend.sessions.lock().len(), 3);
+    }
+
+    #[test]
+    fn pool_size_zero_clamps_to_one() {
+        let backend = OnnxBackend::new(MODEL, 0, DeviceConfig::Cpu).unwrap();
+        assert_eq!(backend.capacity, 1);
     }
 }

@@ -19,6 +19,7 @@ request_timeout_ms = 5000
 [backend]
 # Only "onnx_runtime" is supported right now. ("triton" support planned)
 type = "onnx_runtime"
+device = "cpu"
 
 [registry]
 # Only "mlflow" is supported right now.

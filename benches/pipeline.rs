@@ -22,7 +22,7 @@ use pipex::stage::Stage;
 
 use axon::backend::onnx::OnnxBackend;
 use axon::config::{
-    BackendConfig, BackendType, Config, GrpcConfig, MetricsConfig, ModelSchemaConfig,
+    BackendConfig, BackendType, Config, DeviceConfig, GrpcConfig, MetricsConfig, ModelSchemaConfig,
     PipelineConfig, RegistryConfig, RegistryType, StageConfig, StageObservability, StoreConfig,
     StoreType, TensorSpec,
 };
@@ -61,6 +61,7 @@ fn mnist_config() -> Config {
         },
         backend: BackendConfig {
             backend_type: BackendType::OnnxRuntime,
+            device: DeviceConfig::Cpu,
         },
         registry: RegistryConfig {
             registry_type: RegistryType::Mlflow,
@@ -170,7 +171,8 @@ fn stage_validate(bencher: divan::Bencher) {
 #[divan::bench]
 fn pipeline_infer_only(bencher: divan::Bencher) {
     let config = mnist_config();
-    let backend = Arc::new(OnnxBackend::new(MODEL, 4).unwrap()) as Arc<dyn axon::backend::Backend>;
+    let backend = Arc::new(OnnxBackend::new(MODEL, 4, DeviceConfig::Cpu).unwrap())
+        as Arc<dyn axon::backend::Backend>;
     let pipeline = Arc::new(Mutex::new(build(&config, Arc::clone(&backend)).unwrap().0));
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(4)
@@ -217,7 +219,8 @@ fn pipeline_preprocess_and_infer(bencher: divan::Bencher) {
             observability: no_obs(),
         },
     ];
-    let backend = Arc::new(OnnxBackend::new(MODEL, 4).unwrap()) as Arc<dyn axon::backend::Backend>;
+    let backend = Arc::new(OnnxBackend::new(MODEL, 4, DeviceConfig::Cpu).unwrap())
+        as Arc<dyn axon::backend::Backend>;
     let pipeline = Arc::new(Mutex::new(build(&config, Arc::clone(&backend)).unwrap().0));
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(4)
