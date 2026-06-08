@@ -54,6 +54,7 @@ impl PipelinePool {
     ///
     /// The guard owns an `Arc` clone, so it is `Send` and safe to hold across
     /// `await` points without borrowing from the pool directly.
+    #[must_use]
     pub fn acquire(self: &Arc<Self>) -> PipelineGuard {
         let pipeline = self.slots.lock().pop().unwrap_or_else(|| (self.factory)());
         PipelineGuard {

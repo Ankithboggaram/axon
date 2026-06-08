@@ -209,6 +209,7 @@ impl ModelRegistryClient for MlflowClient {
 
 /// Returns an error if the response status is not 2xx.
 #[cold]
+#[inline(never)]
 fn check_status(resp: &reqwest::Response, context: &str) -> Result<(), RegistryError> {
     if !resp.status().is_success() {
         return Err(RegistryError::Request(format!(
