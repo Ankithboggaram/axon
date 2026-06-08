@@ -17,7 +17,11 @@ pub mod stages;
 pub const MAX_ID_LEN: usize = 128;
 
 /// Per-request working state passed through every pipeline stage.
+///
+/// Aligned to 64 bytes (one cache line) to prevent false sharing when multiple
+/// threads each hold a scratchpad checked out from the pool simultaneously.
 #[derive(Clone, Debug)]
+#[repr(align(64))]
 pub struct InferenceScratchpad {
     /// Entity identifier, stack-allocated to avoid heap allocation on the hot path.
     pub entity_id: ArrayString<MAX_ID_LEN>,

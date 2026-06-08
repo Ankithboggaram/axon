@@ -6,14 +6,15 @@
 //! ## Async/sync boundary
 //!
 //! gRPC I/O runs on the tokio multi-thread runtime. The inference pipeline is
-//! synchronous: stages mutate a scratchpad in place with no await points. The
-//! two meet in `InferenceServer::run_inference`, which calls
-//! `tokio::task::block_in_place` before entering the pipeline. This tells
-//! tokio the current thread is about to block, so the scheduler can move other
-//! tasks to different threads rather than stalling the executor.
+//! synchronous: stages mutate a scratchpad in place with no await points.
+//! [`InferStage`][crate::pipeline::stages::infer::InferStage] is the only stage
+//! that crosses back into async (to call the backend); it uses
+//! `tokio::task::block_in_place` + `block_on` internally to drive the backend
+//! future on the current thread without spawning a new task.
 //!
 //! The pattern is: async shell, sync core. All network I/O is async; all
-//! computation is sync. The boundary is always in the same place.
+//! computation is sync. The boundary is always inside `InferStage`, never in
+//! the server layer.
 
 use std::pin::Pin;
 use std::sync::Arc;

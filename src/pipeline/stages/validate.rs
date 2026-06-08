@@ -20,6 +20,7 @@ pub struct ValidateStage {
 // Separated from run() so #[cold] applies to the entire error-construction path,
 // giving the branch predictor a stronger hint that the hot path never branches here.
 #[cold]
+#[inline(never)]
 fn non_finite_err(val: f32) -> PipelineError {
     let msg = if val.is_nan() {
         "validate: input contains NaN"
