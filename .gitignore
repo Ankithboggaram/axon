@@ -1,7 +1,4 @@
 /target
-fuzz/target/
-fuzz/artifacts/
-fuzz/Cargo.lock
 
 .cargo/*
 !.cargo/config.toml

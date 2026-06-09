@@ -25,6 +25,10 @@ exceptions = [
 multiple-versions = "warn"
 wildcards = "deny"
 
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+
 [advisories]
 # "all" checks every crate in the dependency tree.
 unmaintained = "all"

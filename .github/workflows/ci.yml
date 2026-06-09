@@ -95,3 +95,17 @@ jobs:
         run: cargo doc --no-deps
         env:
           RUSTDOCFLAGS: "-D warnings"
+
+  bench:
+    name: Benchmarks compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install protoc
+        run: sudo apt-get install -y protobuf-compiler
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Compile benchmarks
+        run: cargo bench --no-run
