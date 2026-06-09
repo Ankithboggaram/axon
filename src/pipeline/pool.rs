@@ -9,7 +9,7 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use pipex::dynamic_pipeline::Pipeline;
+use pipexec::dynamic_pipeline::Pipeline;
 
 use crate::pipeline::InferenceScratchpad;
 

@@ -1,7 +1,7 @@
 //! Transforms raw model output into a structured prediction.
 
-use pipex::error::PipelineError;
-use pipex::stage::Stage;
+use pipexec::error::PipelineError;
+use pipexec::stage::Stage;
 
 use crate::config::OutputType;
 use crate::pipeline::InferenceScratchpad;
@@ -25,7 +25,7 @@ impl Stage<InferenceScratchpad> for PostprocessStage {
         if ctx.outputs.is_empty() {
             return Err(PipelineError::StageFailed {
                 stage: "PostprocessStage",
-                message: "postprocess: no outputs from infer stage".into(),
+                source: "postprocess: no outputs from infer stage".into(),
             });
         }
 
@@ -37,10 +37,11 @@ impl Stage<InferenceScratchpad> for PostprocessStage {
                 if output.data.len() != 1 {
                     return Err(PipelineError::StageFailed {
                         stage: "PostprocessStage",
-                        message: format!(
+                        source: format!(
                             "postprocess: binary output type requires a scalar output, got shape {:?}",
                             output.data.shape()
-                        ),
+                        )
+                        .into(),
                     });
                 }
                 output
@@ -60,7 +61,7 @@ impl Stage<InferenceScratchpad> for PostprocessStage {
 mod tests {
     use arrayvec::ArrayString;
     use ndarray::{ArrayD, IxDyn, arr1};
-    use pipex::stage::Stage;
+    use pipexec::stage::Stage;
 
     use super::*;
     use crate::pipeline::InferenceScratchpad;

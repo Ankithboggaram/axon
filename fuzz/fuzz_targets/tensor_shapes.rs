@@ -7,7 +7,7 @@ use axon::pipeline::stages::clip::ClipStage;
 use axon::pipeline::stages::validate::ValidateStage;
 use libfuzzer_sys::fuzz_target;
 use ndarray::{ArrayD, IxDyn};
-use pipex::stage::Stage;
+use pipexec::stage::Stage;
 
 #[derive(Arbitrary, Debug)]
 struct Inputs {

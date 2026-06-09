@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use arrayvec::ArrayString;
-use pipex::error::PipelineError;
-use pipex::stage::Stage;
+use pipexec::error::PipelineError;
+use pipexec::stage::Stage;
 
 use crate::backend::Backend;
 use crate::pipeline::InferenceScratchpad;
@@ -38,7 +38,7 @@ impl Stage<InferenceScratchpad> for InferStage {
         })
         .map_err(|e| PipelineError::StageFailed {
             stage: "InferStage",
-            message: e.to_string(),
+            source: Box::new(e),
         })?;
 
         Ok(())
@@ -52,8 +52,8 @@ mod tests {
     use arrayvec::ArrayString;
     use async_trait::async_trait;
     use ndarray::{ArrayD, IxDyn};
-    use pipex::error::PipelineError;
-    use pipex::stage::Stage;
+    use pipexec::error::PipelineError;
+    use pipexec::stage::Stage;
 
     use super::*;
     use crate::backend::Backend;

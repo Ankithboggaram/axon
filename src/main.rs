@@ -50,7 +50,7 @@ use axon::registry::mlflow::MlflowClient;
 use axon::server::InferenceServer;
 use axon::store::FeatureStore;
 use axon::store::redis::RedisStore;
-use pipex::pool::ScratchpadPool;
+use pipexec::pool::ScratchpadPool;
 
 #[derive(Parser)]
 #[command(name = "axon", about = "A configurable real-time ML inference engine")]

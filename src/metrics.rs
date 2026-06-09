@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use pipex::metrics::StageMetrics;
+use pipexec::metrics::StageMetrics;
 use prometheus::{
     Counter, CounterVec, GaugeVec, Histogram, HistogramOpts, HistogramVec, Opts, Registry,
     TextEncoder,

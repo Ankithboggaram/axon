@@ -149,7 +149,7 @@ dependencies = [
  "ndarray",
  "ort",
  "parking_lot",
- "pipex",
+ "pipexec",
  "prometheus",
  "proptest",
  "prost",
@@ -1428,9 +1428,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
-name = "pipex"
-version = "0.2.0"
-source = "git+https://github.com/Ankithboggaram/pipex.git?tag=v0.2.0#7566ebb87f77d27e403801b072021783cc7f6efd"
+name = "pipexec"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6b497d3393d0b0fa85c3425176c551fa2a7294f27e83424fadf98320259a73f"
 dependencies = [
  "parking_lot",
  "tracing",

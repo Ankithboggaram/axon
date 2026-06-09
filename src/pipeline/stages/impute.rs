@@ -1,7 +1,7 @@
 //! Replaces NaN values in the input tensor with a configured default.
 
-use pipex::error::PipelineError;
-use pipex::stage::Stage;
+use pipexec::error::PipelineError;
+use pipexec::stage::Stage;
 
 use crate::pipeline::InferenceScratchpad;
 
@@ -28,7 +28,7 @@ impl Stage<InferenceScratchpad> for ImputeStage {
 mod tests {
     use arrayvec::ArrayString;
     use ndarray::arr1;
-    use pipex::stage::Stage;
+    use pipexec::stage::Stage;
     use proptest::prelude::*;
 
     use super::*;

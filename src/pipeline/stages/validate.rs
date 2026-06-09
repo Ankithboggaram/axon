@@ -1,7 +1,7 @@
 //! Validates the input tensor shape, checking for NaN and infinite values.
 
-use pipex::error::PipelineError;
-use pipex::stage::Stage;
+use pipexec::error::PipelineError;
+use pipexec::stage::Stage;
 
 use crate::pipeline::InferenceScratchpad;
 
@@ -29,7 +29,7 @@ fn non_finite_err(val: f32) -> PipelineError {
     };
     PipelineError::StageFailed {
         stage: "ValidateStage",
-        message: msg.into(),
+        source: msg.into(),
     }
 }
 
@@ -39,11 +39,12 @@ impl Stage<InferenceScratchpad> for ValidateStage {
         if ctx.input.shape() != self.expected_shape.as_ref() {
             return Err(PipelineError::StageFailed {
                 stage: "ValidateStage",
-                message: format!(
+                source: format!(
                     "validate: expected shape {:?}, got {:?}",
                     self.expected_shape,
                     ctx.input.shape(),
-                ),
+                )
+                .into(),
             });
         }
 
@@ -63,7 +64,7 @@ impl Stage<InferenceScratchpad> for ValidateStage {
 mod tests {
     use arrayvec::ArrayString;
     use ndarray::arr1;
-    use pipex::stage::Stage;
+    use pipexec::stage::Stage;
     use proptest::prelude::*;
 
     use super::*;

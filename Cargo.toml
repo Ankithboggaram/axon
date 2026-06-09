@@ -16,14 +16,14 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [profile.release]
 opt-level = 3
-lto = "fat"         # full cross-crate LTO, lets LLVM inline across ndarray, pipex, and axon
+lto = "fat"         # full cross-crate LTO, lets LLVM inline across ndarray, pipexec, and axon
 codegen-units = 1
 panic = "abort"     # removes stack unwinding machinery; smaller binary, no unwind overhead
 
 [dependencies]
 
 # --- pipeline ---
-pipex = { git = "https://github.com/Ankithboggaram/pipex.git", tag = "v0.2.0" }
+pipexec = "0.3.1"
 ndarray = "0.17"
 
 # --- inference backend ---

@@ -1,7 +1,7 @@
 //! Clamps input tensor values to a configured [min, max] range.
 
-use pipex::error::PipelineError;
-use pipex::stage::Stage;
+use pipexec::error::PipelineError;
+use pipexec::stage::Stage;
 
 use crate::pipeline::InferenceScratchpad;
 
@@ -29,7 +29,7 @@ impl Stage<InferenceScratchpad> for ClipStage {
 mod tests {
     use arrayvec::ArrayString;
     use ndarray::arr1;
-    use pipex::stage::Stage;
+    use pipexec::stage::Stage;
     use proptest::prelude::*;
 
     use super::*;

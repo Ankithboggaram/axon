@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex};
 
 use arrayvec::ArrayString;
 use ndarray::{ArrayD, IxDyn};
-use pipex::stage::Stage;
+use pipexec::stage::Stage;
 
 use axon::backend::onnx::OnnxBackend;
 use axon::config::{

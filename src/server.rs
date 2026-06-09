@@ -20,7 +20,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use pipex::pool::ScratchpadPool;
+use pipexec::pool::ScratchpadPool;
 use tokio_stream::Stream;
 use tonic::{Request, Response, Status};
 use tracing::{error, info, info_span, warn};

@@ -15,7 +15,7 @@ arbitrary = { version = "1", features = ["derive"] }
 toml = "0.8"
 ndarray = "0.17"
 arrayvec = "0.7"
-pipex = { git = "https://github.com/Ankithboggaram/pipex.git", tag = "v0.2.0" }
+pipexec = "0.3.1"
 
 [dependencies.axon]
 path = ".."

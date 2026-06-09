@@ -16,7 +16,7 @@
 
 use std::sync::Arc;
 
-use pipex::pool::ScratchpadPool;
+use pipexec::pool::ScratchpadPool;
 
 use axon::config::{
     BackendConfig, BackendType, Config, DeviceConfig, GrpcConfig, MetricsConfig, ModelSchemaConfig,

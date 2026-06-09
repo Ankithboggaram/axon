@@ -1,7 +1,7 @@
 //! Config-to-pipeline translation: the place where `config.toml` becomes a running pipeline.
 //!
 //! [`build`] is the single entry point. It reads a [`Config`] and produces a
-//! [`pipex::dynamic_pipeline::Pipeline`] with every stage wrapped in the
+//! [`pipexec::dynamic_pipeline::Pipeline`] with every stage wrapped in the
 //! observability decorators declared in config (timing, instrumentation,
 //! deadlines, retries).
 //!
@@ -18,12 +18,12 @@ use std::time::Duration;
 
 use arrayvec::ArrayString;
 use ndarray::{ArrayD, IxDyn};
-use pipex::deadline::Deadline;
-use pipex::dynamic_pipeline::Pipeline;
-use pipex::instrument::Instrumented;
-use pipex::metrics::{StageMetrics, Timed};
-use pipex::retry::Retry;
-use pipex::stage::Stage;
+use pipexec::deadline::Deadline;
+use pipexec::dynamic_pipeline::Pipeline;
+use pipexec::instrument::Instrumented;
+use pipexec::metrics::{StageMetrics, Timed};
+use pipexec::retry::Retry;
+use pipexec::stage::Stage;
 
 use crate::backend::Backend;
 use crate::config::{Config, StageConfig, StageObservability};

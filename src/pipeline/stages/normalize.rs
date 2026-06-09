@@ -1,7 +1,7 @@
 //! Normalises the input tensor by subtracting the mean and multiplying by inv_std.
 
-use pipex::error::PipelineError;
-use pipex::stage::Stage;
+use pipexec::error::PipelineError;
+use pipexec::stage::Stage;
 
 use crate::pipeline::InferenceScratchpad;
 
@@ -32,7 +32,7 @@ impl Stage<InferenceScratchpad> for NormalizeStage {
 mod tests {
     use arrayvec::ArrayString;
     use ndarray::arr1;
-    use pipex::stage::Stage;
+    use pipexec::stage::Stage;
     use proptest::prelude::*;
 
     use super::*;

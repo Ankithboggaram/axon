@@ -2,7 +2,7 @@
 
 use arrayvec::ArrayString;
 use ndarray::ArrayD;
-use pipex::scratchpad::Scratchpad;
+use pipexec::scratchpad::Scratchpad;
 
 use crate::types::OutputBuffer;
 

@@ -23,10 +23,7 @@ exceptions = [
 # skew (e.g. hashbrown 0.12/0.17, thiserror 1/2) is unavoidable while
 # transitive dependencies catch up.
 multiple-versions = "warn"
-# pipex is a git dep until it is published to crates.io; git deps have no
-# semver constraint so cargo-deny flags them as wildcards. Switch this back
-# to "deny" once pipex is on crates.io and the dep uses a version field.
-wildcards = "warn"
+wildcards = "deny"
 
 [advisories]
 # "all" checks every crate in the dependency tree.
@@ -41,6 +38,3 @@ ignore = [
     { id = "RUSTSEC-2024-0437" },
 ]
 
-[sources]
-# pipex is only available as a git dep until it is published to crates.io.
-allow-git = ["https://github.com/Ankithboggaram/pipex.git"]

@@ -23,20 +23,17 @@
 //!
 //! # Architecture
 //!
-//! ```text
-//! ┌─────────────────────────────────────────────────┐
-//! │  gRPC server  (tonic, tokio multi-thread)       │
-//! │  async: I/O, store fetch, response dispatch     │
-//! ├─────────────────────────────────────────────────┤
-//! │  InferStage   (block_in_place boundary)         │
-//! ├─────────────────────────────────────────────────┤
-//! │  pipex pipeline  (sync, zero-allocation stages) │
-//! │  impute → validate → clip → normalize → infer   │
-//! │                          → postprocess          │
-//! ├─────────────────────────────────────────────────┤
-//! │  ONNX Runtime backend  (session pool)           │
-//! └─────────────────────────────────────────────────┘
-//! ```
+//! A request flows through four layers:
+//!
+//! - **gRPC server** (tonic, tokio multi-thread) — async I/O, feature store
+//!   fetch, response dispatch. Never touches the model directly.
+//! - **pipexec pipeline** — synchronous, zero-allocation stage chain. Stages
+//!   mutate an `InferenceScratchpad` in place:
+//!   `impute → validate → clip → normalize → infer → postprocess`
+//! - **InferStage** — the async/sync boundary. Uses `block_in_place` to drive
+//!   the backend future on the current thread without spawning a new task.
+//! - **ONNX Runtime backend** — in-process inference with a session pool; one
+//!   session per concurrent request, no serialisation under normal load.
 //!
 //! **This server intentionally does not provide:** model training, batch
 //! inference, model versioning, A/B routing, or feature engineering. Those
