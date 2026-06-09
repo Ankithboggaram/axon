@@ -61,14 +61,14 @@ pub fn build(
                     .map(|&d| d as usize)
                     .collect::<Vec<_>>()
                     .into_boxed_slice();
-                let stage = ValidateStage {
-                    expected_shape: shape,
-                };
-                let (boxed, m) = wrap(Box::new(stage), observability);
-                pipeline.push_boxed(boxed);
-                if let Some(m) = m {
-                    stage_metrics.push(m);
-                }
+                add_stage(
+                    &mut pipeline,
+                    &mut stage_metrics,
+                    Box::new(ValidateStage {
+                        expected_shape: shape,
+                    }),
+                    observability,
+                );
             }
 
             StageConfig::Normalize {
@@ -76,15 +76,15 @@ pub fn build(
                 std,
                 observability,
             } => {
-                let stage = NormalizeStage {
-                    mean: *mean,
-                    inv_std: 1.0 / std,
-                };
-                let (boxed, m) = wrap(Box::new(stage), observability);
-                pipeline.push_boxed(boxed);
-                if let Some(m) = m {
-                    stage_metrics.push(m);
-                }
+                add_stage(
+                    &mut pipeline,
+                    &mut stage_metrics,
+                    Box::new(NormalizeStage {
+                        mean: *mean,
+                        inv_std: 1.0 / std,
+                    }),
+                    observability,
+                );
             }
 
             StageConfig::Clip {
@@ -92,29 +92,29 @@ pub fn build(
                 max,
                 observability,
             } => {
-                let stage = ClipStage {
-                    min: *min,
-                    max: *max,
-                };
-                let (boxed, m) = wrap(Box::new(stage), observability);
-                pipeline.push_boxed(boxed);
-                if let Some(m) = m {
-                    stage_metrics.push(m);
-                }
+                add_stage(
+                    &mut pipeline,
+                    &mut stage_metrics,
+                    Box::new(ClipStage {
+                        min: *min,
+                        max: *max,
+                    }),
+                    observability,
+                );
             }
 
             StageConfig::Impute {
                 default_value,
                 observability,
             } => {
-                let stage = ImputeStage {
-                    default_value: *default_value,
-                };
-                let (boxed, m) = wrap(Box::new(stage), observability);
-                pipeline.push_boxed(boxed);
-                if let Some(m) = m {
-                    stage_metrics.push(m);
-                }
+                add_stage(
+                    &mut pipeline,
+                    &mut stage_metrics,
+                    Box::new(ImputeStage {
+                        default_value: *default_value,
+                    }),
+                    observability,
+                );
             }
 
             StageConfig::Infer { observability } => {
@@ -128,15 +128,15 @@ pub fn build(
                             MAX_TENSOR_NAME_LEN
                         )
                     })?;
-                let stage = InferStage {
-                    backend: Arc::clone(&backend),
-                    input_name,
-                };
-                let (boxed, m) = wrap(Box::new(stage), observability);
-                pipeline.push_boxed(boxed);
-                if let Some(m) = m {
-                    stage_metrics.push(m);
-                }
+                add_stage(
+                    &mut pipeline,
+                    &mut stage_metrics,
+                    Box::new(InferStage {
+                        backend: Arc::clone(&backend),
+                        input_name,
+                    }),
+                    observability,
+                );
             }
 
             StageConfig::Postprocess {
@@ -144,15 +144,15 @@ pub fn build(
                 output_type,
                 observability,
             } => {
-                let stage = PostprocessStage {
-                    threshold: *threshold,
-                    output_type: *output_type,
-                };
-                let (boxed, m) = wrap(Box::new(stage), observability);
-                pipeline.push_boxed(boxed);
-                if let Some(m) = m {
-                    stage_metrics.push(m);
-                }
+                add_stage(
+                    &mut pipeline,
+                    &mut stage_metrics,
+                    Box::new(PostprocessStage {
+                        threshold: *threshold,
+                        output_type: *output_type,
+                    }),
+                    observability,
+                );
             }
         }
     }
@@ -230,6 +230,19 @@ pub fn validate_ordering(stages: &[StageConfig]) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn add_stage(
+    pipeline: &mut Pipeline<InferenceScratchpad>,
+    stage_metrics: &mut Vec<Arc<StageMetrics>>,
+    stage: Box<dyn Stage<InferenceScratchpad>>,
+    obs: &StageObservability,
+) {
+    let (boxed, m) = wrap(stage, obs);
+    pipeline.push_boxed(boxed);
+    if let Some(m) = m {
+        stage_metrics.push(m);
+    }
 }
 
 /// Applies observability wrappers to a stage.
