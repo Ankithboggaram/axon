@@ -108,4 +108,4 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Compile benchmarks
-        run: cargo bench --no-run
+        run: cargo bench --no-run --profile dev
