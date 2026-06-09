@@ -393,6 +393,15 @@ impl Config {
                     }
                 }
             }
+
+            if let StageConfig::Clip { min, max, .. } = stage
+                && min >= max
+            {
+                return Err(ConfigError::Invalid {
+                    field: "pipeline.stages[clip]",
+                    reason: format!("min ({min}) must be less than max ({max})"),
+                });
+            }
         }
 
         Ok(())
@@ -591,6 +600,38 @@ mod tests {
             StageConfig::Normalize {
                 mean: 0.5,
                 std: 1.5,
+                observability: obs(),
+            },
+            StageConfig::Infer {
+                observability: obs(),
+            },
+        ];
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn rejects_clip_min_ge_max() {
+        let mut cfg = valid_config();
+        cfg.pipeline.stages = vec![
+            StageConfig::Clip {
+                min: 1.0,
+                max: 1.0,
+                observability: obs(),
+            },
+            StageConfig::Infer {
+                observability: obs(),
+            },
+        ];
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn accepts_clip_valid_range() {
+        let mut cfg = valid_config();
+        cfg.pipeline.stages = vec![
+            StageConfig::Clip {
+                min: -1.0,
+                max: 1.0,
                 observability: obs(),
             },
             StageConfig::Infer {

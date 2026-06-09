@@ -6,19 +6,6 @@ use ndarray::{ArrayD, ArrayViewD};
 /// Maximum byte length for output tensor names.
 pub const MAX_TENSOR_NAME_LEN: usize = 64;
 
-/// A named n-dimensional tensor with owned data.
-///
-/// Used for non-hot-path data transfer (serialisation, inter-component
-/// communication). On the hot path, use NamedTensorRef for inputs and
-/// OutputBuffer for outputs to avoid heap allocation.
-#[derive(Debug)]
-pub struct NamedTensor {
-    /// Tensor name as registered in the model schema.
-    pub name: String,
-    /// Tensor values as a dynamic-shape array.
-    pub data: ArrayD<f32>,
-}
-
 /// A borrowed view of a named tensor, used for backend inputs on the hot path.
 ///
 /// Holds references into existing data rather than owning a copy, so

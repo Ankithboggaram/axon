@@ -92,9 +92,6 @@ pub fn build(
                 max,
                 observability,
             } => {
-                if min >= max {
-                    anyhow::bail!("clip stage: min ({}) must be less than max ({})", min, max);
-                }
                 let stage = ClipStage {
                     min: *min,
                     max: *max,
