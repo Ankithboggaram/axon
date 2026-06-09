@@ -20,8 +20,13 @@
 //!
 //! - [`redis::RedisStore`]: MessagePack-encoded vectors stored in Redis
 
+use std::pin::Pin;
+use std::time::Duration;
+
 use async_trait::async_trait;
+use futures_util::{Stream, StreamExt as _};
 use ndarray::ArrayD;
+use tokio_stream::wrappers::IntervalStream;
 
 use crate::error::StoreError;
 
@@ -88,4 +93,22 @@ pub trait FeatureStore: std::fmt::Debug + Send + Sync {
         entity_id: &str,
         dest: &mut ArrayD<f32>,
     ) -> Result<FetchResult, StoreError>;
+
+    /// Returns a stream that yields `()` each time new features may be
+    /// available for `entity_id`.
+    ///
+    /// The default implementation yields on a fixed `poll_interval` timer —
+    /// behaviour identical to the previous poll loop. Stores that support push
+    /// notifications (e.g. Redis pub/sub) should override this to yield only
+    /// when an actual update arrives, eliminating unnecessary fetches.
+    ///
+    /// If the stream ends (e.g. the underlying connection drops) the caller
+    /// should treat the streaming response as complete.
+    async fn update_stream(
+        &self,
+        _entity_id: &str,
+        poll_interval: Duration,
+    ) -> Pin<Box<dyn Stream<Item = ()> + Send>> {
+        Box::pin(IntervalStream::new(tokio::time::interval(poll_interval)).map(|_| ()))
+    }
 }

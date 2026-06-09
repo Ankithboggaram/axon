@@ -20,6 +20,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use futures_util::StreamExt as _;
 use pipexec::pool::ScratchpadPool;
 use tokio_stream::Stream;
 use tonic::{Request, Response, Status};
@@ -207,7 +208,8 @@ impl InferenceService for InferenceServer {
             let span = info_span!("predict_stream", entity_id = %entity_id);
             let _enter = span.enter();
 
-            loop {
+            let mut updates = server.store.update_stream(&entity_id, server.stream_poll_interval).await;
+            while let Some(()) = updates.next().await {
                 let start = Instant::now();
                 let result = server.run_inference(&entity_id, &[]).await;
                 let elapsed = start.elapsed().as_secs_f64();
@@ -241,8 +243,6 @@ impl InferenceService for InferenceServer {
                         Err(e)?;
                     }
                 }
-
-                tokio::time::sleep(server.stream_poll_interval).await;
             }
         };
 
