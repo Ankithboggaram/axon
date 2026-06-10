@@ -111,7 +111,7 @@ grpcurl -plaintext \
   localhost:50051 axon.inference.v1.InferenceService/PredictStream
 ```
 
-Ctrl-C to disconnect. Axon polls the store at `stream_poll_interval_ms` (configurable) and emits a response on each poll.
+Ctrl-C to disconnect. When using the Redis feature store, Axon subscribes to the entity's pub/sub channel and emits a response whenever features are updated. For other store backends, it falls back to polling at `stream_poll_interval_ms`.
 
 For Rust clients, see [`examples/client.rs`](examples/client.rs) (unary) and [`examples/streaming_client.rs`](examples/streaming_client.rs) (streaming). Run with:
 
@@ -232,6 +232,7 @@ type         = "infer"
 timed        = true    # records p99/p999 latency in Prometheus
 instrumented = true    # emits a tracing span per execution
 retries      = 3       # retries up to N times on failure
+deadline_ms  = 50      # fails the stage if it exceeds this budget
 ```
 
 ---
@@ -323,7 +324,7 @@ impl Backend for TritonBackend {
 }
 ```
 
-Then add `BackendConfig::Triton { url: String }` and a matching build arm in `src/pipeline/build.rs`.
+Then add `BackendConfig::Triton { url: String }` and instantiate it alongside the ONNX backend in `src/main.rs`.
 
 The same pattern applies for:
 
@@ -337,9 +338,9 @@ The same pattern applies for:
 ## Roadmap
 
 - [x] OnnxBackend session pool for concurrent inference
+- [x] Event-driven streaming via Redis pub/sub (falls back to polling for other stores)
 - [ ] Triton Inference Server backend
-- [ ] Event-driven streaming via Redis pub/sub (replaces polling)
-- [ ] Add additional pipeline stages like `drift_detect`, `audit` and `argmax`
+- [ ] Add additional pipeline stages like `drift_detect`, `audit` and `argmax`gs
 - [ ] WASM custom pipeline stages
 
 ---
