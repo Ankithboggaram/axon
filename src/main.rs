@@ -131,7 +131,8 @@ async fn main() -> anyhow::Result<()> {
             let store: Arc<dyn FeatureStore> = match config.store.store_type {
                 StoreType::Redis => {
                     let url = format!("redis://{}:{}", config.store.host, config.store.port);
-                    Arc::new(RedisStore::new(&url, "features")?)
+                    let key_prefix = config.store.key_prefix.as_deref().unwrap_or("features");
+                    Arc::new(RedisStore::new(&url, key_prefix)?)
                 }
                 _ => anyhow::bail!("unsupported store type"),
             };
@@ -304,12 +305,22 @@ fn default_pool_size() -> usize {
 }
 
 fn init_tracing() {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+
+    // Set AXON_LOG_JSON=1 for structured JSON output (recommended in production).
+    let json = std::env::var("AXON_LOG_JSON")
+        .map(|v| v == "1" || v == "true")
+        .unwrap_or(false);
+
+    if json {
+        tracing_subscriber::fmt()
+            .json()
+            .with_env_filter(filter)
+            .init();
+    } else {
+        tracing_subscriber::fmt().with_env_filter(filter).init();
+    }
 }
 
 async fn store_health_check(

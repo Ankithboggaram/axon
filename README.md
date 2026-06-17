@@ -165,7 +165,8 @@ model_version = "1"            # version number or "latest"
 type                       = "redis"
 host                       = "localhost"
 port                       = 6379
-health_check_interval_secs = 10   # readiness probe polling interval
+key_prefix                 = "features"  # keys stored as {key_prefix}:{entity_id}
+health_check_interval_secs = 10          # readiness probe polling interval
 
 [metrics]
 port = 9090
@@ -249,11 +250,12 @@ Prometheus metrics are scraped from `http://localhost:<metrics.port>/metrics` (d
 | `axon_stage_p99_ns{stage}`           | Per-stage p99 latency in nanoseconds  |
 | `axon_stage_p999_ns{stage}`          | Per-stage p999 latency in nanoseconds |
 
-Structured logs are written to stdout. Control verbosity with `RUST_LOG`:
+Structured logs are written to stdout. Control verbosity with `RUST_LOG` and switch to JSON format with `AXON_LOG_JSON`:
 
 ```bash
 RUST_LOG=info axon serve --config config.toml
 RUST_LOG=axon=trace,warn axon serve --config config.toml
+AXON_LOG_JSON=1 RUST_LOG=info axon serve --config config.toml   # JSON output for log aggregators
 ```
 
 ---

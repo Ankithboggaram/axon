@@ -62,6 +62,7 @@ fn mnist_config() -> Config {
             store_type: StoreType::Redis,
             host: "localhost".to_owned(),
             port: 6379,
+            key_prefix: None,
             health_check_interval_secs: None,
         },
         metrics: MetricsConfig { port: 9090 },

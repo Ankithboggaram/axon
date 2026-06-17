@@ -128,6 +128,10 @@ pub struct StoreConfig {
     pub host: String,
     /// Feature store port.
     pub port: u16,
+    /// Prefix for feature keys in the store. Feature vectors are stored and
+    /// looked up under `{key_prefix}:{entity_id}`. Defaults to `"features"`.
+    #[serde(default)]
+    pub key_prefix: Option<String>,
     /// How often the background task pings the store to update the readiness probe, in seconds.
     /// Defaults to 10. The service is marked NOT_SERVING after two consecutive failures.
     #[serde(default)]
@@ -445,6 +449,7 @@ mod tests {
                 store_type: StoreType::Redis,
                 host: "localhost".to_owned(),
                 port: 6379,
+                key_prefix: None,
                 health_check_interval_secs: None,
             },
             metrics: MetricsConfig { port: 9090 },
