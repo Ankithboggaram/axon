@@ -1,4 +1,18 @@
-//! Delegates inference to the configured backend.
+//! Inference stage: the async/sync bridge between the pipeline and the backend.
+//!
+//! [`InferStage`] is the only stage that crosses the sync/async boundary.
+//! The pipexec [`Stage`] trait is synchronous (`&mut self` on the calling
+//! thread); [`Backend::run`] is `async`. The bridge is
+//! `tokio::task::block_in_place`, which parks the current thread for the
+//! duration of the future without spawning a new task. This keeps inference
+//! on the same OS thread, avoids task-queue overhead, and preserves the
+//! zero-allocation guarantee: no new allocations happen during the bridge.
+//!
+//! The backend writes its predictions directly into the scratchpad's
+//! pre-allocated `outputs` buffers. No intermediate tensor is created.
+//!
+//! [`Stage`]: pipexec::stage::Stage
+//! [`Backend::run`]: crate::backend::Backend::run
 
 use std::sync::Arc;
 

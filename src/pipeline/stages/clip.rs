@@ -1,4 +1,16 @@
-//! Clamps input tensor values to a configured [min, max] range.
+//! Outlier clipping stage.
+//!
+//! [`ClipStage`] clamps every element of the input tensor to a configured
+//! `[min, max]` range before normalisation. Without clipping, extreme outliers
+//! produce very large normalised values that shift the model's decision boundary
+//! unpredictably — a common silent failure mode in production feature pipelines.
+//!
+//! The stage is always infallible: any finite value maps to a value in
+//! `[min, max]`. Place it after [`ValidateStage`] (which guarantees finite
+//! inputs) and before [`NormalizeStage`].
+//!
+//! [`ValidateStage`]: crate::pipeline::stages::validate::ValidateStage
+//! [`NormalizeStage`]: crate::pipeline::stages::normalize::NormalizeStage
 
 use pipexec::error::PipelineError;
 use pipexec::stage::Stage;

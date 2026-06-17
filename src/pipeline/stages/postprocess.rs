@@ -1,4 +1,22 @@
-//! Transforms raw model output into a structured prediction.
+//! Postprocessing stage: interprets raw model output as a structured prediction.
+//!
+//! [`PostprocessStage`] is the last stage in the pipeline. It reads the first
+//! output tensor written by [`InferStage`] and applies one of three
+//! interpretations configured via `output_type`:
+//!
+//! - **`Binary`**: thresholds the scalar score against `threshold`, returning
+//!   `1.0` (positive class) or `-1.0` (negative class). Requires a scalar
+//!   output; fails if the output tensor has more than one element.
+//! - **`Probability`**: passes the raw score through unchanged. The caller
+//!   interprets the value as a probability in `[0, 1]`.
+//! - **`Raw`**: passes the raw model output through unchanged. Use for
+//!   multi-class logits, embeddings, or any output the model produces directly.
+//!
+//! Only `outputs[0]` is read. Axon serves one model and one prediction per
+//! request; multi-output models that need both outputs processed belong outside
+//! this pipeline.
+//!
+//! [`InferStage`]: crate::pipeline::stages::infer::InferStage
 
 use pipexec::error::PipelineError;
 use pipexec::stage::Stage;

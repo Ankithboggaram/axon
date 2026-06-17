@@ -1,4 +1,17 @@
-//! Replaces NaN values in the input tensor with a configured default.
+//! Mean imputation stage for missing feature values.
+//!
+//! Features fetched from the store can contain NaN wherever a value was never
+//! recorded for that entity. Without imputation, NaN propagates through every
+//! subsequent arithmetic stage (normalize, clip) and poisons the entire
+//! inference result silently.
+//!
+//! [`ImputeStage`] replaces every NaN element with a single configured
+//! `default_value` (typically the training-set mean for that feature). It is
+//! always infallible: any input, including an all-NaN tensor, produces a valid
+//! finite output. Place it first in the pipeline, before [`ValidateStage`],
+//! so that validation only sees clean data.
+//!
+//! [`ValidateStage`]: crate::pipeline::stages::validate::ValidateStage
 
 use pipexec::error::PipelineError;
 use pipexec::stage::Stage;

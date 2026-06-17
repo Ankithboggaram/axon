@@ -1,4 +1,19 @@
-//! Normalises the input tensor by subtracting the mean and multiplying by inv_std.
+//! Zero-mean unit-variance normalisation stage.
+//!
+//! [`NormalizeStage`] applies the transformation `(x - mean) * inv_std` to
+//! every element of the input tensor. This maps raw feature values onto a
+//! standardised scale so that no single feature dominates the model's input
+//! distribution due to its unit or magnitude.
+//!
+//! The reciprocal of std (`inv_std = 1.0 / std`) is precomputed once at
+//! pipeline wiring time so the hot path performs a multiply rather than a
+//! divide. Division is 10–30× slower than multiplication on modern CPUs;
+//! this matters when normalisation runs millions of times per second.
+//!
+//! The stage is always infallible given finite inputs. Place it after
+//! [`ClipStage`] to ensure outliers do not produce extreme normalised values.
+//!
+//! [`ClipStage`]: crate::pipeline::stages::clip::ClipStage
 
 use pipexec::error::PipelineError;
 use pipexec::stage::Stage;

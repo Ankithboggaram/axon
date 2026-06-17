@@ -1,4 +1,22 @@
-//! Validates the input tensor shape, checking for NaN and infinite values.
+//! Shape and finite-value validation stage.
+//!
+//! [`ValidateStage`] is the contract enforcer between the feature store and the
+//! model. It asserts two invariants before any computation reaches the backend:
+//!
+//! 1. **Shape** — the tensor dimensions match `expected_shape` exactly. A
+//!    mismatch here means either the store returned the wrong entity's features
+//!    or the config's `model_schema` does not match the deployed model.
+//!
+//! 2. **Finite values** — no element is NaN or infinite. If an [`ImputeStage`]
+//!    is present it should run first; a NaN reaching `ValidateStage` indicates
+//!    the impute stage was skipped or misconfigured.
+//!
+//! The non-finite check uses `f32::is_finite()`, which tests both NaN and
+//! infinity in a single CPU instruction. The error-construction path is marked
+//! `#[cold]` and `#[inline(never)]` so the branch predictor treats it as
+//! unreachable on the hot path.
+//!
+//! [`ImputeStage`]: crate::pipeline::stages::impute::ImputeStage
 
 use pipexec::error::PipelineError;
 use pipexec::stage::Stage;
