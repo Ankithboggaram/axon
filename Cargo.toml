@@ -5,9 +5,10 @@ edition = "2024"
 license = "MIT"
 description = "A configurable real-time ML inference engine, part of the Cortex platform"
 repository = "https://github.com/Ankithboggaram/axon"
-homepage    = "https://github.com/Ankithboggaram/axon"
-keywords    = ["inference", "onnx", "grpc", "machine-learning", "pipeline"]
-categories  = ["science"]
+homepage = "https://github.com/Ankithboggaram/axon"
+readme = "README.md"
+keywords = ["inference", "onnx", "grpc", "machine-learning", "pipeline"]
+categories = ["science", "network-programming", "asynchronous"]
 rust-version = "1.85"
 
 [package.metadata.docs.rs]
