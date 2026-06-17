@@ -215,14 +215,14 @@ Supported dtypes: `float32` `float64` `int8` `int16` `int32` `int64` `uint8` `ui
 
 ## Pipeline stages
 
-| Stage | What it does | Parameters |
-|---|---|---|
-| `impute` | Replaces NaN values with a fixed default | `default_value` |
-| `validate` | Rejects wrong shapes and non-finite values | `expected_shape` |
-| `clip` | Clamps values to `[min, max]` before normalisation | `min`, `max` |
-| `normalize` | Applies zero-mean unit-variance normalisation | `mean`, `std` |
-| `infer` | Runs the model via the configured backend | (none) |
-| `postprocess` | Transforms raw model output into a prediction | `threshold`, `output_type` |
+| Stage         | What it does                                       | Parameters                 |
+| ------------- | -------------------------------------------------- | -------------------------- |
+| `impute`      | Replaces NaN values with a fixed default           | `default_value`            |
+| `validate`    | Rejects wrong shapes and non-finite values         | `expected_shape`           |
+| `clip`        | Clamps values to `[min, max]` before normalisation | `min`, `max`               |
+| `normalize`   | Applies zero-mean unit-variance normalisation      | `mean`, `std`              |
+| `infer`       | Runs the model via the configured backend          | (none)                     |
+| `postprocess` | Transforms raw model output into a prediction      | `threshold`, `output_type` |
 
 Each stage accepts optional observability and reliability flags:
 
@@ -241,13 +241,13 @@ deadline_ms  = 50      # fails the stage if it exceeds this budget
 
 Prometheus metrics are scraped from `http://localhost:<metrics.port>/metrics` (default port `9090`).
 
-| Metric | Description |
-|---|---|
-| `axon_requests_total{rpc, status}` | Total requests by RPC and outcome |
-| `axon_request_duration_seconds{rpc}` | End-to-end request latency |
-| `axon_store_fetch_duration_seconds` | Feature store fetch latency |
-| `axon_stage_p99_ns{stage}` | Per-stage p99 latency in nanoseconds |
-| `axon_stage_p999_ns{stage}` | Per-stage p999 latency in nanoseconds |
+| Metric                               | Description                           |
+| ------------------------------------ | ------------------------------------- |
+| `axon_requests_total{rpc, status}`   | Total requests by RPC and outcome     |
+| `axon_request_duration_seconds{rpc}` | End-to-end request latency            |
+| `axon_store_fetch_duration_seconds`  | Feature store fetch latency           |
+| `axon_stage_p99_ns{stage}`           | Per-stage p99 latency in nanoseconds  |
+| `axon_stage_p999_ns{stage}`          | Per-stage p999 latency in nanoseconds |
 
 Structured logs are written to stdout. Control verbosity with `RUST_LOG`:
 
@@ -328,9 +328,9 @@ Then add `BackendConfig::Triton { url: String }` and instantiate it alongside th
 
 The same pattern applies for:
 
-| Trait | Implement to add |
-|---|---|
-| `FeatureStore` | A new feature store (e.g. Feast, Cassandra) |
+| Trait                 | Implement to add                                   |
+| --------------------- | -------------------------------------------------- |
+| `FeatureStore`        | A new feature store (e.g. Feast, Cassandra)        |
 | `ModelRegistryClient` | A new model registry (e.g. Vertex AI, custom HTTP) |
 
 ---
@@ -340,7 +340,7 @@ The same pattern applies for:
 - [x] OnnxBackend session pool for concurrent inference
 - [x] Event-driven streaming via Redis pub/sub (falls back to polling for other stores)
 - [ ] Triton Inference Server backend
-- [ ] Add additional pipeline stages like `drift_detect`, `audit` and `argmax`gs
+- [ ] Add additional pipeline stages like `drift_detect`, `audit` and `argmax`
 - [ ] WASM custom pipeline stages
 
 ---
