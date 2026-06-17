@@ -1,4 +1,20 @@
-//! MLflow model registry client.
+//! MLflow model registry client over the MLflow REST API.
+//!
+//! [`MlflowClient`] implements [`ModelRegistryClient`] against the MLflow
+//! tracking server. It handles two operations:
+//!
+//! - **[`fetch_model`][crate::registry::ModelRegistryClient::fetch_model]**:
+//!   resolves the version (including `"latest"`), streams the ONNX artifact to
+//!   a local temp file, and returns its path. Streams directly to disk to avoid
+//!   buffering the entire model in memory.
+//!
+//! - **[`fetch_config_seed`][crate::registry::ModelRegistryClient::fetch_config_seed]**:
+//!   downloads the `MLmodel` metadata file, parses the model signature for
+//!   tensor specs, and fetches the training run's logged params (`mean`, `std`,
+//!   `clip_min`, `clip_max`, `threshold`) to pre-fill the config seed.
+//!
+//! All internal response types are private: they model only the fields axon
+//! actually uses from the MLflow API, not the full response schema.
 
 use std::collections::HashMap;
 use std::path::PathBuf;

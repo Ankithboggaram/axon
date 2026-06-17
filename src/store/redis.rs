@@ -1,4 +1,25 @@
-//! Redis feature store client.
+//! Redis-backed feature store using a connection pool and pub/sub streaming.
+//!
+//! [`RedisStore`] stores feature vectors as MessagePack-encoded `Vec<f32>` under
+//! the key `{key_prefix}:{entity_id}`. The key prefix is set at construction
+//! time via [`StoreConfig::key_prefix`][crate::config::StoreConfig::key_prefix]
+//! and defaults to `"features"`.
+//!
+//! ## Streaming
+//!
+//! For [`FeatureStore::update_stream`], `RedisStore` subscribes to the
+//! pub/sub channel `{key_prefix}:updates:{entity_id}`. The upstream feature
+//! writer (Dendrite) must publish to that channel after writing new features.
+//! If the subscription fails (Redis unreachable, pub/sub disabled), the channel
+//! sender is dropped and the stream ends — the gRPC client reconnects and the
+//! next call falls back to the poll-interval default from the trait.
+//!
+//! ## Connection model
+//!
+//! A [`deadpool_redis`] connection pool handles all fetch and ping operations.
+//! A separate bare [`redis::Client`] is used for pub/sub connections — one
+//! per active streaming subscription — because pub/sub connections cannot
+//! interleave with regular command traffic on the same connection.
 
 use std::pin::Pin;
 use std::time::Duration;

@@ -1,4 +1,33 @@
 //! ONNX Runtime inference backend, in-process with no network hop.
+//!
+//! [`OnnxBackend`] loads one or more ONNX Runtime sessions at startup and
+//! pools them for concurrent inference. Each call to [`Backend::run`] pops a
+//! session from the pool, runs inference exclusively on that session, then
+//! returns it. If all pool slots are in use, an overflow session is created
+//! on the fly for that call and discarded afterward.
+//!
+//! ## Graph optimization
+//!
+//! Every session is built with [`GraphOptimizationLevel::Level3`] (the maximum).
+//! Optimization runs once at session creation and is not paid on requests.
+//!
+//! ## Execution providers
+//!
+//! The execution provider is selected by [`DeviceConfig`] at construction time:
+//! `cpu` (default), `coreml`, `cuda`, or `tensorrt`. Non-CPU providers use
+//! `error_on_failure()` to guarantee a clear startup error rather than a silent
+//! fallback to CPU that would be invisible to operators.
+//!
+//! ## Output copy
+//!
+//! ORT owns its output buffers, so results are copied into the scratchpad's
+//! pre-allocated [`OutputBuffer`] with `ndarray::assign`. For small outputs
+//! (e.g. `[1, 1]` scores) this copy is negligible; for larger outputs
+//! (embeddings, classification heads) it can be eliminated using ORT's
+//! `IoBinding` API — tracked in the architectural backlog.
+//!
+//! [`DeviceConfig`]: crate::config::DeviceConfig
+//! [`OutputBuffer`]: crate::types::OutputBuffer
 
 use async_trait::async_trait;
 use ort::ep;
