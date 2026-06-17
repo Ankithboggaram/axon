@@ -50,6 +50,18 @@ impl PipelinePool {
         }
     }
 
+    /// Returns the number of pipelines currently idle in the pool.
+    #[must_use]
+    pub fn available(&self) -> usize {
+        self.slots.lock().len()
+    }
+
+    /// Returns the maximum number of pipelines the pool will hold at rest.
+    #[must_use]
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+
     /// Checks out a pipeline from the pool.
     ///
     /// The guard owns an `Arc` clone, so it is `Send` and safe to hold across
