@@ -20,7 +20,12 @@ Part of the **Cortex** platform. Works alongside Dendrite (feature pipeline) and
 
 ## Quickstart
 
-The steps below use MLflow as the model registry and Redis as the feature store. Start them locally if you don't have them running:
+```bash
+git clone https://github.com/Ankithboggaram/axon
+cd axon
+```
+
+Start Redis and MLflow locally if you don't have them running:
 
 ```bash
 # Redis
@@ -31,45 +36,48 @@ pip install mlflow
 mlflow server --host 0.0.0.0 --port 5000
 ```
 
-**Step 1: Build the image**
+**Step 1: Register a model and seed the feature store**
+
+Axon needs a model registered in MLflow and feature vectors in Redis before it can serve anything. The included demo script trains a logistic regression fraud-detection model, exports it to ONNX, registers it, and writes 50 synthetic feature vectors to Redis:
 
 ```bash
-git clone https://github.com/Ankithboggaram/axon
-cd axon
+pip install numpy scikit-learn onnx mlflow redis msgpack-python
+python scripts/seed_demo.py
+```
+
+This prints the exact `axon init` command to run next, with the model name and version filled in.
+
+**Step 2: Build the image**
+
+```bash
 docker build -t axon .
 ```
 
-**Step 2: Generate a config**
+**Step 3: Generate a config**
 
 ```bash
 docker run --rm --network host \
   -v $(pwd):/output \
-  axon init <model_name> <model_version> \
+  axon init fraud_demo 1 \
   --registry-uri http://localhost:5000 \
   --output /output/config.toml
 ```
 
-This queries the registry for the model's signature and any logged training parameters, then writes a `config.toml` pre-filled with what it can determine.
+This queries MLflow for the model's signature and the run's logged params (`mean`, `std`, `clip_min`, `clip_max`, `threshold`), then writes a `config.toml` pre-filled with what it finds.
 
-**Step 3: Fill in the TODOs**
+**Step 4: Fill in the registry URI**
 
-Open `config.toml` and replace any remaining `TODO` values. The most common are preprocessing parameters that were not logged to the registry at training time:
+Open `config.toml`. The only value that needs filling in is `registry.uri` — everything else (`mean`, `std`, `clip_min`, `clip_max`, `threshold`, tensor shapes) is pre-filled from the run params logged by the seed script:
 
 ```toml
 # generated
-[[pipeline.stages]]
-type = "normalize"
-mean = "TODO"
-std  = "TODO"
+uri = "TODO: MLflow tracking server URI (e.g. http://localhost:5000)"
 
-# filled in
-[[pipeline.stages]]
-type = "normalize"
-mean = 0.143
-std  = 0.892
+# fill in
+uri = "http://localhost:5000"
 ```
 
-**Step 4: Run the server**
+**Step 5: Run the server**
 
 ```bash
 docker run -d \
@@ -79,15 +87,15 @@ docker run -d \
   axon
 ```
 
-**Step 5: Send a request**
+**Step 6: Send a request**
 
 ```bash
 grpcurl -plaintext \
-  -d '{"entity_id": "user_123", "features": [0.1, 0.5, 0.3, 0.8]}' \
+  -d '{"entity_id": "entity_0001"}' \
   localhost:50051 axon.inference.v1.InferenceService/Predict
 ```
 
-Passing `features` directly bypasses the feature store. Useful for smoke-testing without any data in the store. Remove it to trigger a store lookup by `entity_id`.
+`entity_0001` was seeded by the demo script. See [Inference modes](#inference-modes) for how to pass features inline to bypass the store.
 
 ---
 
