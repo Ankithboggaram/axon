@@ -1,4 +1,5 @@
 /target
+/models/
 
 .cargo/*
 !.cargo/config.toml
@@ -7,3 +8,7 @@
 *.log
 .env
 .env.*
+
+# ONNX model files — test fixtures are committed explicitly; production models must not be
+*.onnx
+!tests/fixtures/*.onnx

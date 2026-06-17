@@ -17,7 +17,7 @@
 //! ## Connection model
 //!
 //! A [`deadpool_redis`] connection pool handles all fetch and ping operations.
-//! A separate bare [`redis::Client`] is used for pub/sub connections — one
+//! A separate bare `redis::Client` is used for pub/sub connections — one
 //! per active streaming subscription — because pub/sub connections cannot
 //! interleave with regular command traffic on the same connection.
 

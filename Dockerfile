@@ -18,11 +18,12 @@ RUN touch src/main.rs && cargo build --release --locked
 # Collect ORT and OpenMP shared libraries for the runtime image.
 RUN mkdir -p /app/lib && \
     find /app/target /root -name "libonnxruntime.so*" 2>/dev/null | head -1 | xargs -I{} cp {} /app/lib/libonnxruntime.so && \
-    find /usr/lib -name "libgomp.so.1" 2>/dev/null | head -1 | xargs -I{} cp {} /app/lib/libgomp.so.1
+    find /usr/lib -name "libgomp.so.1" 2>/dev/null | head -1 | xargs -I{} cp {} /app/lib/libgomp.so.1 && \
+    test -f /app/lib/libonnxruntime.so || (echo "ERROR: libonnxruntime.so not found; cannot build runtime image" && exit 1)
 
 # Stage 2: runtime
-# Distroless: no shell, no package manager, minimal attack surface.
-FROM gcr.io/distroless/cc-debian12 AS runtime
+# Distroless nonroot: no shell, no package manager, runs as UID 65532.
+FROM gcr.io/distroless/cc-debian12:nonroot AS runtime
 
 WORKDIR /app
 
@@ -34,6 +35,8 @@ ENV LD_LIBRARY_PATH=/app/lib
 
 EXPOSE 50051
 EXPOSE 9090
+
+USER nonroot:nonroot
 
 ENTRYPOINT ["./axon"]
 CMD ["serve", "--config", "config.toml"]
