@@ -176,10 +176,23 @@ url                        = "redis://localhost:6379"
 key_prefix                 = "features"  # keys stored as {key_prefix}:{entity_id}
 health_check_interval_secs = 10          # readiness probe polling interval
 
+# Optional. Omit this whole section to disable freshness enforcement — the
+# axon_served_feature_age_seconds metric is still recorded either way.
+[freshness]
+max_feature_age_ms = 5000     # reject/flag features older than this
+on_stale            = "flag"  # "flag" (serve anyway, just warn) | "reject"
+
 [metrics]
 port = 9090
 
 # Tensor names, types, and shapes must match the model exactly.
+
+# Optional fallback schema_version to enforce against served FeatureRecords,
+# used only when the model registry has no schema_version tag for the model.
+# Needs its own [model_schema] header, before the tables below.
+# [model_schema]
+# schema_version = 1
+
 [[model_schema.inputs]]
 name  = "features"
 dtype = "float32"
@@ -250,13 +263,15 @@ deadline_ms  = 50      # fails the stage if it exceeds this budget
 
 Prometheus metrics are scraped from `http://localhost:<metrics.port>/metrics` (default port `9090`).
 
-| Metric                               | Description                           |
-| ------------------------------------ | ------------------------------------- |
-| `axon_requests_total{rpc, status}`   | Total requests by RPC and outcome     |
-| `axon_request_duration_seconds{rpc}` | End-to-end request latency            |
-| `axon_store_fetch_duration_seconds`  | Feature store fetch latency           |
-| `axon_stage_p99_ns{stage}`           | Per-stage p99 latency in nanoseconds  |
-| `axon_stage_p999_ns{stage}`          | Per-stage p999 latency in nanoseconds |
+| Metric                               | Description                                     |
+| ------------------------------------ | ----------------------------------------------- |
+| `axon_requests_total{rpc, status}`   | Total requests by RPC and outcome               |
+| `axon_request_duration_seconds{rpc}` | End-to-end request latency                      |
+| `axon_store_fetch_duration_seconds`  | Feature store fetch latency                     |
+| `axon_served_feature_age_seconds`    | Age of served features (`now - event_time_ms`)  |
+| `axon_schema_version_rejects_total`  | Requests rejected for a schema_version mismatch |
+| `axon_stage_p99_ns{stage}`           | Per-stage p99 latency in nanoseconds            |
+| `axon_stage_p999_ns{stage}`          | Per-stage p999 latency in nanoseconds           |
 
 Structured logs are written to stdout. Control verbosity with `RUST_LOG` and switch to JSON format with `AXON_LOG_JSON`:
 
@@ -338,10 +353,10 @@ Then add `BackendConfig::Triton { url: String }` and instantiate it alongside th
 
 The same pattern applies for:
 
-| Trait                 | Implement to add                                   |
-| --------------------- | -------------------------------------------------- |
+| Trait                 | Implement to add                                                                |
+| --------------------- | ------------------------------------------------------------------------------- |
 | `OnlineStoreReader`   | A new feature store backend (e.g. Feast, Cassandra), added to `cortex-contract` |
-| `ModelRegistryClient` | A new model registry (e.g. Vertex AI, custom HTTP) |
+| `ModelRegistryClient` | A new model registry (e.g. Vertex AI, custom HTTP)                              |
 
 ---
 

@@ -33,12 +33,26 @@ model_version = "latest"   # a version number or "latest"
 type = "redis"
 url = "redis://localhost:6379"
 
+# Optional: omit this whole section to disable freshness enforcement.
+# axon_served_feature_age_seconds is recorded either way.
+# [freshness]
+# max_feature_age_ms = 5000
+# on_stale            = "flag"   # "flag" | "reject"
+
 [metrics]
 port = 9090
 
 # Tensor names, types, and shapes must match exactly what's in the .onnx file.
 # Supported dtypes: float32 | float64 | int8 | int16 | int32 | int64
 #                   uint8 | uint16 | uint32 | uint64 | bool | string
+
+# Optional: fallback schema_version to check served FeatureRecords against,
+# used only when the model registry has no schema_version tag. Needs its own
+# [model_schema] header, before the [[model_schema.inputs/outputs]] tables
+# below — a bare `model_schema.schema_version = 1` here would instead attach
+# to whichever [table] most recently preceded it (TOML's "open table" rule).
+# [model_schema]
+# schema_version = 1
 
 [[model_schema.inputs]]
 name  = "features"

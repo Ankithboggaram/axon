@@ -27,6 +27,7 @@ use tokio_stream::Stream;
 use tonic::{Request, Response, Status};
 use tracing::{error, info, info_span, warn};
 
+use crate::config::{FreshnessAction, FreshnessConfig};
 use crate::metrics::Metrics;
 use crate::pipeline::InferenceScratchpad;
 use crate::pipeline::pool::PipelinePool;
@@ -46,16 +47,25 @@ pub struct InferenceServer {
     scratchpad_pool: Arc<ScratchpadPool<InferenceScratchpad>>,
     metrics: Arc<Metrics>,
     stream_poll_interval: Duration,
+    /// Freshness enforcement settings. `None` disables enforcement (age is
+    /// still recorded as a metric).
+    freshness: Option<FreshnessConfig>,
+    /// The model's trained `schema_version` to enforce served features
+    /// against. `None` disables schema-version enforcement.
+    expected_schema_version: Option<u32>,
 }
 
 impl InferenceServer {
     /// Creates a new inference server wiring together all subsystems.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         store: Arc<dyn OnlineStoreReader>,
         pipeline_pool: Arc<PipelinePool>,
         scratchpad_pool: Arc<ScratchpadPool<InferenceScratchpad>>,
         metrics: Arc<Metrics>,
         stream_poll_interval_ms: u64,
+        freshness: Option<FreshnessConfig>,
+        expected_schema_version: Option<u32>,
     ) -> Self {
         Self {
             store,
@@ -63,6 +73,8 @@ impl InferenceServer {
             scratchpad_pool,
             metrics,
             stream_poll_interval: Duration::from_millis(stream_poll_interval_ms),
+            freshness,
+            expected_schema_version,
         }
     }
 
@@ -89,8 +101,6 @@ impl InferenceServer {
             .as_millis() as i64;
 
         if inline_features.is_empty() {
-            // The header (schema_version, event_time_ms) is unused until Phase B's
-            // freshness/schema-version checks are wired in; fetch always fills it.
             let mut header = RecordHeader::default();
             let fetch_start = Instant::now();
             let result = self
@@ -110,12 +120,34 @@ impl InferenceServer {
                 .store_fetch_duration_seconds
                 .observe(fetch_start.elapsed().as_secs_f64());
 
-            if matches!(result, FetchResult::Miss) {
-                self.metrics.store_misses_total.inc();
-                warn!(
-                    entity_id,
-                    "feature store miss; pipeline will run on zeroed input"
-                );
+            match result {
+                FetchResult::Miss => {
+                    self.metrics.store_misses_total.inc();
+                    warn!(
+                        entity_id,
+                        "feature store miss; pipeline will run on zeroed input"
+                    );
+                }
+                FetchResult::Hit => {
+                    // Clock skew between Dendrite and Axon could otherwise make this negative.
+                    let age_ms = (ctx.timestamp_ms - header.event_time_ms).max(0);
+                    self.metrics
+                        .served_feature_age_seconds
+                        .observe(age_ms as f64 / 1000.0);
+
+                    if let Some(freshness) = &self.freshness {
+                        Self::enforce_freshness(freshness, age_ms, entity_id)?;
+                    }
+
+                    if let Some(expected) = self.expected_schema_version
+                        && header.schema_version != expected
+                    {
+                        self.metrics.schema_version_rejects_total.inc();
+                        Self::enforce_schema_version(expected, header.schema_version, entity_id)?;
+                    }
+                }
+                // FetchResult is #[non_exhaustive]; treat any future variant like a miss.
+                _ => {}
             }
         } else {
             if inline_features.len() != ctx.input.len() {
@@ -152,6 +184,51 @@ impl InferenceServer {
             outputs,
             timestamp_ms: ctx.timestamp_ms,
         })
+    }
+
+    /// Applies `[freshness]` enforcement to a served feature vector's age.
+    ///
+    /// Returns `Ok` if the vector is within `max_feature_age_ms`, or if it
+    /// isn't but `on_stale` is [`FreshnessAction::Flag`] (a warning is logged
+    /// instead). Returns `Err` only for [`FreshnessAction::Reject`] on a
+    /// vector that exceeds the bound.
+    #[allow(clippy::result_large_err)] // Status is axon's standard gRPC error type throughout this file
+    fn enforce_freshness(
+        freshness: &FreshnessConfig,
+        age_ms: i64,
+        entity_id: &str,
+    ) -> Result<(), Status> {
+        #[allow(clippy::cast_sign_loss)] // age_ms is clamped to >= 0 by the caller
+        if (age_ms as u64) <= freshness.max_feature_age_ms {
+            return Ok(());
+        }
+
+        match freshness.on_stale {
+            FreshnessAction::Flag => {
+                warn!(
+                    entity_id,
+                    age_ms,
+                    max_feature_age_ms = freshness.max_feature_age_ms,
+                    "served features exceed max age"
+                );
+                Ok(())
+            }
+            FreshnessAction::Reject => Err(Status::failed_precondition(format!(
+                "features stale for entity '{entity_id}': age {age_ms}ms exceeds max {}ms",
+                freshness.max_feature_age_ms
+            ))),
+        }
+    }
+
+    /// Applies schema-version enforcement: `Err` iff `got != expected`.
+    #[allow(clippy::result_large_err)] // Status is axon's standard gRPC error type throughout this file
+    fn enforce_schema_version(expected: u32, got: u32, entity_id: &str) -> Result<(), Status> {
+        if got == expected {
+            return Ok(());
+        }
+        Err(Status::failed_precondition(format!(
+            "schema_version mismatch for entity '{entity_id}': model trained on {expected}, served record is {got}"
+        )))
     }
 }
 
@@ -254,5 +331,55 @@ impl InferenceService for InferenceServer {
         };
 
         Ok(Response::new(Box::pin(stream)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn freshness(max_feature_age_ms: u64, on_stale: FreshnessAction) -> FreshnessConfig {
+        FreshnessConfig {
+            max_feature_age_ms,
+            on_stale,
+        }
+    }
+
+    #[test]
+    fn freshness_within_bound_is_ok() {
+        let cfg = freshness(1000, FreshnessAction::Reject);
+        assert!(InferenceServer::enforce_freshness(&cfg, 500, "e1").is_ok());
+    }
+
+    #[test]
+    fn freshness_at_exact_bound_is_ok() {
+        let cfg = freshness(1000, FreshnessAction::Reject);
+        assert!(InferenceServer::enforce_freshness(&cfg, 1000, "e1").is_ok());
+    }
+
+    #[test]
+    fn freshness_flag_never_errors_even_when_stale() {
+        let cfg = freshness(100, FreshnessAction::Flag);
+        assert!(InferenceServer::enforce_freshness(&cfg, 5000, "e1").is_ok());
+    }
+
+    #[test]
+    fn freshness_reject_errors_when_stale() {
+        let cfg = freshness(100, FreshnessAction::Reject);
+        let err = InferenceServer::enforce_freshness(&cfg, 5000, "e1").unwrap_err();
+        assert_eq!(err.code(), tonic::Code::FailedPrecondition);
+        assert!(err.message().contains("e1"));
+    }
+
+    #[test]
+    fn schema_version_match_is_ok() {
+        assert!(InferenceServer::enforce_schema_version(1, 1, "e1").is_ok());
+    }
+
+    #[test]
+    fn schema_version_mismatch_errors() {
+        let err = InferenceServer::enforce_schema_version(1, 2, "e1").unwrap_err();
+        assert_eq!(err.code(), tonic::Code::FailedPrecondition);
+        assert!(err.message().contains("e1"));
     }
 }

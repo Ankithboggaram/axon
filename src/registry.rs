@@ -17,6 +17,11 @@ pub struct RegisteredModel {
     pub version: String,
     /// Local filesystem path to the downloaded ONNX artifact.
     pub local_path: String,
+    /// The `feature_schema.toml` version this model was trained against, if
+    /// the registry records one (e.g. a `schema_version` tag stamped by the
+    /// training pipeline). `None` if the registry has no such tag; callers
+    /// should fall back to a config value for schema-version enforcement.
+    pub schema_version: Option<u32>,
 }
 
 /// Subset of config values populated from the model registry during `axon init`.
@@ -80,8 +85,7 @@ impl ConfigSeed {
 
         writeln!(out, "[store]").unwrap();
         writeln!(out, "type = \"redis\"").unwrap();
-        writeln!(out, "host = \"localhost\"").unwrap();
-        writeln!(out, "port = 6379").unwrap();
+        writeln!(out, "url = \"redis://localhost:6379\"").unwrap();
         writeln!(out).unwrap();
 
         writeln!(out, "[metrics]").unwrap();
@@ -289,6 +293,7 @@ mod tests {
                     dtype: "float32".to_owned(),
                     shape: vec![1, 1],
                 }],
+                schema_version: None,
             }),
             mean: Some(0.5),
             std: Some(1.5),

@@ -137,6 +137,32 @@ pub struct StoreConfig {
     pub health_check_interval_secs: Option<u64>,
 }
 
+/// What to do when a served feature vector exceeds `FreshnessConfig::max_feature_age_ms`.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FreshnessAction {
+    /// Serve the prediction anyway; only a warning log and the age metric record the violation.
+    #[default]
+    Flag,
+    /// Reject the request instead of serving a prediction on stale features.
+    Reject,
+}
+
+/// Feature freshness enforcement settings.
+///
+/// The `[freshness]` section as a whole is optional: if absent, Axon still
+/// records `axon_served_feature_age_seconds` but never rejects or warns on
+/// stale features.
+#[derive(Clone, Debug, Deserialize)]
+pub struct FreshnessConfig {
+    /// Maximum age (`now - event_time_ms`) a served feature vector may have, in milliseconds.
+    pub max_feature_age_ms: u64,
+    /// What to do when a fetched feature vector exceeds `max_feature_age_ms`. Defaults to `flag`.
+    #[serde(default)]
+    pub on_stale: FreshnessAction,
+}
+
 /// Prometheus metrics HTTP exposition settings.
 #[derive(Clone, Debug, Deserialize)]
 pub struct MetricsConfig {
@@ -162,6 +188,12 @@ pub struct ModelSchemaConfig {
     pub inputs: Vec<TensorSpec>,
     /// Specs for each output tensor the model produces.
     pub outputs: Vec<TensorSpec>,
+    /// Fallback `feature_schema.toml` version to enforce served
+    /// `FeatureRecord`s against, used when the model registry has no
+    /// `schema_version` tag for the model version. `None` (and no tag either)
+    /// disables schema-version enforcement entirely.
+    #[serde(default)]
+    pub schema_version: Option<u32>,
 }
 
 /// Per-stage observability options.
@@ -254,6 +286,9 @@ pub struct Config {
     pub registry: RegistryConfig,
     /// Feature store settings.
     pub store: StoreConfig,
+    /// Feature freshness enforcement. Absent disables enforcement (metrics still recorded).
+    #[serde(default)]
+    pub freshness: Option<FreshnessConfig>,
     /// Prometheus metrics settings.
     pub metrics: MetricsConfig,
     /// Input and output tensor specs expected by the model.
@@ -336,6 +371,15 @@ impl Config {
             return Err(ConfigError::Invalid {
                 field: "store.health_check_interval_secs",
                 reason: "must not be 0; omit the field to use the default of 10 seconds".into(),
+            });
+        }
+
+        if let Some(freshness) = &self.freshness
+            && freshness.max_feature_age_ms == 0
+        {
+            return Err(ConfigError::Invalid {
+                field: "freshness.max_feature_age_ms",
+                reason: "must not be 0; omit the [freshness] section to disable enforcement".into(),
             });
         }
 
@@ -443,6 +487,7 @@ mod tests {
                 key_prefix: None,
                 health_check_interval_secs: None,
             },
+            freshness: None,
             metrics: MetricsConfig { port: 9090 },
             model_schema: ModelSchemaConfig {
                 inputs: vec![TensorSpec {
@@ -455,6 +500,7 @@ mod tests {
                     dtype: "float32".to_owned(),
                     shape: vec![1, 1],
                 }],
+                schema_version: None,
             },
             pipeline: PipelineConfig {
                 stages: vec![StageConfig::Infer {
@@ -544,6 +590,50 @@ mod tests {
         let mut cfg = valid_config();
         cfg.store.health_check_interval_secs = Some(30);
         assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn freshness_absent_by_default() {
+        assert!(valid_config().freshness.is_none());
+    }
+
+    #[test]
+    fn rejects_zero_freshness_max_age() {
+        let mut cfg = valid_config();
+        cfg.freshness = Some(FreshnessConfig {
+            max_feature_age_ms: 0,
+            on_stale: FreshnessAction::Flag,
+        });
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn accepts_nonzero_freshness_max_age() {
+        let mut cfg = valid_config();
+        cfg.freshness = Some(FreshnessConfig {
+            max_feature_age_ms: 500,
+            on_stale: FreshnessAction::Reject,
+        });
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn freshness_on_stale_defaults_to_flag() {
+        let toml = r#"
+            max_feature_age_ms = 500
+        "#;
+        let cfg: FreshnessConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.on_stale, FreshnessAction::Flag);
+    }
+
+    #[test]
+    fn freshness_on_stale_reject_parses() {
+        let toml = r#"
+            max_feature_age_ms = 500
+            on_stale = "reject"
+        "#;
+        let cfg: FreshnessConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.on_stale, FreshnessAction::Reject);
     }
 
     #[test]

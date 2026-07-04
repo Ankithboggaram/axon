@@ -84,6 +84,39 @@ impl MlflowClient {
             })
     }
 
+    /// Fetches the tags attached to a model version (e.g. a `schema_version`
+    /// tag stamped by the training pipeline).
+    async fn get_model_version_tags(
+        &self,
+        name: &str,
+        version: &str,
+    ) -> Result<HashMap<String, String>, RegistryError> {
+        let resp = self
+            .http
+            .get(format!(
+                "{}/api/2.0/mlflow/model-versions/get",
+                self.tracking_uri
+            ))
+            .query(&[("name", name), ("version", version)])
+            .send()
+            .await
+            .map_err(|e| RegistryError::Request(format!("failed to fetch model version: {e}")))?;
+
+        check_status(&resp, "model version")?;
+
+        let data: ModelVersionResponse = resp.json().await.map_err(|e| {
+            RegistryError::Parse(format!("failed to parse model version response: {e}"))
+        })?;
+
+        Ok(data
+            .model_version
+            .tags
+            .unwrap_or_default()
+            .into_iter()
+            .map(|t| (t.key, t.value))
+            .collect())
+    }
+
     async fn get_run_params(&self, run_id: &str) -> Result<HashMap<String, String>, RegistryError> {
         let resp = self
             .http
@@ -184,10 +217,27 @@ impl ModelRegistryClient for MlflowClient {
         let resolved = self.resolve_version(name, version).await?;
         let local_path = self.download_artifact(name, &resolved).await?;
 
+        // schema_version enrichment is best-effort: an older MLflow server, a
+        // model version with no tags, or a transient error here must not fail
+        // startup. main.rs falls back to a config value when this is None.
+        let schema_version = match self.get_model_version_tags(name, &resolved).await {
+            Ok(tags) => tags.get("schema_version").and_then(|v| v.parse().ok()),
+            Err(e) => {
+                tracing::warn!(
+                    name,
+                    version = %resolved,
+                    error = %e,
+                    "could not read model version tags; schema_version enforcement will use the config fallback if set"
+                );
+                None
+            }
+        };
+
         Ok(RegisteredModel {
             name: name.to_owned(),
             version: resolved,
             local_path: local_path.to_string_lossy().into_owned(),
+            schema_version,
         })
     }
 
@@ -281,6 +331,9 @@ fn parse_model_schema(
             .into_iter()
             .map(convert)
             .collect::<Result<_, RegistryError>>()?,
+        // Not sourced from the signature block; `fetch_model`'s schema_version
+        // tag read is what actually drives enforcement at serve time.
+        schema_version: None,
     })
 }
 
@@ -315,6 +368,16 @@ struct RunDataInner {
 struct Param {
     key: String,
     value: String,
+}
+
+#[derive(Deserialize)]
+struct ModelVersionResponse {
+    model_version: ModelVersionData,
+}
+
+#[derive(Deserialize)]
+struct ModelVersionData {
+    tags: Option<Vec<Param>>,
 }
 
 // MLmodel YAML types.

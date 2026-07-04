@@ -44,7 +44,9 @@ def load_feature_record_module(contract_dir: Path) -> ModuleType:
     hand-written mirror to drift out of sync.
     """
     if shutil.which("protoc") is None:
-        sys.exit("error: 'protoc' not found on PATH (required to read cortex-contract's proto/)")
+        sys.exit(
+            "error: 'protoc' not found on PATH (required to read cortex-contract's proto/)"
+        )
 
     proto_dir = contract_dir / "proto"
     proto_file = proto_dir / "cortex" / "contract" / "v1" / "feature_record.proto"

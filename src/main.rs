@@ -155,6 +155,18 @@ async fn main() -> anyhow::Result<()> {
                 "model artifact ready"
             );
 
+            // The registry's schema_version tag wins; the config value is only
+            // a fallback for registries or models that don't stamp one.
+            let expected_schema_version =
+                model.schema_version.or(config.model_schema.schema_version);
+            match expected_schema_version {
+                Some(v) => info!(schema_version = v, "schema-version enforcement enabled"),
+                None => info!(
+                    "no schema_version available from the registry or config; \
+                     schema-version enforcement disabled"
+                ),
+            }
+
             // Generate Triton config.pbtxt. Non-fatal: ONNX backend does not require it.
             match generate_triton_config(&model.name, &config.model_schema) {
                 Ok(pbtxt) => {
@@ -253,6 +265,8 @@ async fn main() -> anyhow::Result<()> {
                 scratchpad_pool,
                 metrics,
                 config.grpc.stream_poll_interval_ms,
+                config.freshness.clone(),
+                expected_schema_version,
             );
 
             let grpc_addr: SocketAddr = format!("{}:{}", config.grpc.host, config.grpc.port)

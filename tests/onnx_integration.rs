@@ -63,6 +63,7 @@ fn mnist_config() -> Config {
             key_prefix: None,
             health_check_interval_secs: None,
         },
+        freshness: None,
         metrics: MetricsConfig { port: 9090 },
         model_schema: ModelSchemaConfig {
             inputs: vec![TensorSpec {
@@ -75,6 +76,7 @@ fn mnist_config() -> Config {
                 dtype: "float32".to_owned(),
                 shape: vec![1, 10],
             }],
+            schema_version: None,
         },
         pipeline: PipelineConfig {
             stages: vec![StageConfig::Infer {

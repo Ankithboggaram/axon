@@ -29,6 +29,16 @@ pub struct Metrics {
     /// Total feature store lookups that returned no entry for the entity.
     pub store_misses_total: Counter,
 
+    /// Age (`now - event_time_ms`) of served feature vectors, in seconds.
+    /// Recorded on every store hit regardless of whether `[freshness]`
+    /// enforcement is configured: the serving half of the end-to-end
+    /// freshness SLA.
+    pub served_feature_age_seconds: Histogram,
+
+    /// Total requests rejected for a `schema_version` mismatch between the
+    /// served `FeatureRecord` and the model's trained schema.
+    pub schema_version_rejects_total: Counter,
+
     // Per-stage latency and error rate snapshots, refreshed on each scrape.
     stage_p99_ns: GaugeVec,
     stage_p999_ns: GaugeVec,
@@ -84,6 +94,25 @@ impl Metrics {
             ),
             "axon_store_misses_total",
         )?;
+        let served_feature_age_seconds = reg(
+            &registry,
+            Histogram::with_opts(
+                HistogramOpts::new(
+                    "axon_served_feature_age_seconds",
+                    "Age of served feature vectors (now - event_time_ms) in seconds.",
+                )
+                .buckets(vec![0.001, 0.01, 0.1, 0.5, 1.0, 5.0, 30.0, 60.0, 300.0]),
+            ),
+            "axon_served_feature_age_seconds",
+        )?;
+        let schema_version_rejects_total = reg(
+            &registry,
+            Counter::new(
+                "axon_schema_version_rejects_total",
+                "Total requests rejected for a served/trained schema_version mismatch.",
+            ),
+            "axon_schema_version_rejects_total",
+        )?;
         let stage_p99_ns = reg(
             &registry,
             GaugeVec::new(
@@ -126,6 +155,8 @@ impl Metrics {
             request_duration_seconds,
             store_fetch_duration_seconds,
             store_misses_total,
+            served_feature_age_seconds,
+            schema_version_rejects_total,
             stage_p99_ns,
             stage_p999_ns,
             stage_count_total,
