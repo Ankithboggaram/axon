@@ -34,8 +34,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
+      - name: Install build dependencies
+        # protobuf-compiler: protoc, needed by axon's and cortex-contract's build.rs.
+        # libcurl4-openssl-dev: the runner has a partial libcurl present (runtime
+        # lib, no headers), which makes librdkafka's cmake build auto-detect curl
+        # support and then fail on a missing curl/curl.h despite -DWITH_CURL=0.
+        # Installing the headers makes the auto-detected build actually succeed.
+        run: sudo apt-get install -y protobuf-compiler libcurl4-openssl-dev
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -53,8 +58,13 @@ jobs:
         rust: [stable, beta]
     steps:
       - uses: actions/checkout@v5
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
+      - name: Install build dependencies
+        # protobuf-compiler: protoc, needed by axon's and cortex-contract's build.rs.
+        # libcurl4-openssl-dev: the runner has a partial libcurl present (runtime
+        # lib, no headers), which makes librdkafka's cmake build auto-detect curl
+        # support and then fail on a missing curl/curl.h despite -DWITH_CURL=0.
+        # Installing the headers makes the auto-detected build actually succeed.
+        run: sudo apt-get install -y protobuf-compiler libcurl4-openssl-dev
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
@@ -69,8 +79,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
+      - name: Install build dependencies
+        # protobuf-compiler: protoc, needed by axon's and cortex-contract's build.rs.
+        # libcurl4-openssl-dev: the runner has a partial libcurl present (runtime
+        # lib, no headers), which makes librdkafka's cmake build auto-detect curl
+        # support and then fail on a missing curl/curl.h despite -DWITH_CURL=0.
+        # Installing the headers makes the auto-detected build actually succeed.
+        run: sudo apt-get install -y protobuf-compiler libcurl4-openssl-dev
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.MSRV }}
@@ -85,8 +100,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
+      - name: Install build dependencies
+        # protobuf-compiler: protoc, needed by axon's and cortex-contract's build.rs.
+        # libcurl4-openssl-dev: the runner has a partial libcurl present (runtime
+        # lib, no headers), which makes librdkafka's cmake build auto-detect curl
+        # support and then fail on a missing curl/curl.h despite -DWITH_CURL=0.
+        # Installing the headers makes the auto-detected build actually succeed.
+        run: sudo apt-get install -y protobuf-compiler libcurl4-openssl-dev
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -101,8 +121,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Install protoc
-        run: sudo apt-get install -y protobuf-compiler
+      - name: Install build dependencies
+        # protobuf-compiler: protoc, needed by axon's and cortex-contract's build.rs.
+        # libcurl4-openssl-dev: the runner has a partial libcurl present (runtime
+        # lib, no headers), which makes librdkafka's cmake build auto-detect curl
+        # support and then fail on a missing curl/curl.h despite -DWITH_CURL=0.
+        # Installing the headers makes the auto-detected build actually succeed.
+        run: sudo apt-get install -y protobuf-compiler libcurl4-openssl-dev
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
