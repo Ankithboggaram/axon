@@ -40,7 +40,9 @@ jobs:
         # lib, no headers), which makes librdkafka's cmake build auto-detect curl
         # support and then fail on a missing curl/curl.h despite -DWITH_CURL=0.
         # Installing the headers makes the auto-detected build actually succeed.
-        run: sudo apt-get install -y protobuf-compiler libcurl4-openssl-dev
+        # `apt-get update` first: the runner image's pre-baked package index
+        # points at a libcurl4-openssl-dev build that 404s on the live mirror.
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libcurl4-openssl-dev
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -64,7 +66,9 @@ jobs:
         # lib, no headers), which makes librdkafka's cmake build auto-detect curl
         # support and then fail on a missing curl/curl.h despite -DWITH_CURL=0.
         # Installing the headers makes the auto-detected build actually succeed.
-        run: sudo apt-get install -y protobuf-compiler libcurl4-openssl-dev
+        # `apt-get update` first: the runner image's pre-baked package index
+        # points at a libcurl4-openssl-dev build that 404s on the live mirror.
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libcurl4-openssl-dev
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
@@ -85,7 +89,9 @@ jobs:
         # lib, no headers), which makes librdkafka's cmake build auto-detect curl
         # support and then fail on a missing curl/curl.h despite -DWITH_CURL=0.
         # Installing the headers makes the auto-detected build actually succeed.
-        run: sudo apt-get install -y protobuf-compiler libcurl4-openssl-dev
+        # `apt-get update` first: the runner image's pre-baked package index
+        # points at a libcurl4-openssl-dev build that 404s on the live mirror.
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libcurl4-openssl-dev
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.MSRV }}
@@ -106,7 +112,9 @@ jobs:
         # lib, no headers), which makes librdkafka's cmake build auto-detect curl
         # support and then fail on a missing curl/curl.h despite -DWITH_CURL=0.
         # Installing the headers makes the auto-detected build actually succeed.
-        run: sudo apt-get install -y protobuf-compiler libcurl4-openssl-dev
+        # `apt-get update` first: the runner image's pre-baked package index
+        # points at a libcurl4-openssl-dev build that 404s on the live mirror.
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libcurl4-openssl-dev
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -127,7 +135,9 @@ jobs:
         # lib, no headers), which makes librdkafka's cmake build auto-detect curl
         # support and then fail on a missing curl/curl.h despite -DWITH_CURL=0.
         # Installing the headers makes the auto-detected build actually succeed.
-        run: sudo apt-get install -y protobuf-compiler libcurl4-openssl-dev
+        # `apt-get update` first: the runner image's pre-baked package index
+        # points at a libcurl4-openssl-dev build that 404s on the live mirror.
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libcurl4-openssl-dev
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
