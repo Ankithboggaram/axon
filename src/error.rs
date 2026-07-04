@@ -4,10 +4,11 @@
 //! matching to remain compatible with future variants.
 //!
 //! Each enum corresponds to one subsystem:
-//! - [`ConfigError`]   - config file loading and validation
-//! - [`BackendError`]  - inference backend (ONNX Runtime, Triton, ...)
-//! - [`RegistryError`] - model registry (MLflow, ...)
-//! - [`ServeError`]    - server startup and metrics initialisation
+//! - [`ConfigError`]      - config file loading and validation
+//! - [`BackendError`]     - inference backend (ONNX Runtime, Triton, ...)
+//! - [`RegistryError`]    - model registry (MLflow, ...)
+//! - [`ServeError`]       - server startup and metrics initialisation
+//! - [`PredictionsError`] - closed-loop prediction logging (Kafka producer setup)
 //!
 //! The online feature store's errors are `cortex_contract::StoreError`; Axon
 //! no longer defines its own, since it no longer owns the store.
@@ -113,6 +114,15 @@ pub enum ServeError {
     /// The Prometheus metrics could not be encoded for the scrape endpoint.
     #[error("failed to encode metrics: {0}")]
     MetricsEncoding(String),
+}
+
+/// Errors from setting up closed-loop prediction logging (`crate::predictions`).
+#[non_exhaustive]
+#[derive(Debug, Error)]
+pub enum PredictionsError {
+    /// The `rdkafka` producer could not be constructed from `[predictions]` config.
+    #[error("failed to create Kafka producer: {0}")]
+    ProducerCreation(String),
 }
 
 #[cfg(test)]

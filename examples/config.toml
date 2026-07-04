@@ -39,6 +39,14 @@ url = "redis://localhost:6379"
 # max_feature_age_ms = 5000
 # on_stale            = "flag"   # "flag" | "reject"
 
+# Optional: omit this whole section (or set enabled = false) to disable
+# closed-loop prediction logging. No Kafka producer is created either way.
+# [predictions]
+# enabled     = true
+# brokers     = "localhost:9092"
+# topic       = "predictions"
+# sample_rate = 1.0   # 0.0..=1.0; fraction of predictions emitted (deterministic, every Nth)
+
 [metrics]
 port = 9090
 

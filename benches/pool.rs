@@ -65,6 +65,7 @@ fn mnist_config() -> Config {
             health_check_interval_secs: None,
         },
         freshness: None,
+        predictions: None,
         metrics: MetricsConfig { port: 9090 },
         model_schema: ModelSchemaConfig {
             inputs: vec![TensorSpec {

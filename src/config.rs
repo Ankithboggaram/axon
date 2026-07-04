@@ -163,6 +163,36 @@ pub struct FreshnessConfig {
     pub on_stale: FreshnessAction,
 }
 
+/// Closed-loop prediction logging settings (`PredictionRecord` emission to Kafka).
+///
+/// The `[predictions]` section as a whole is optional: if absent, no Kafka
+/// producer is constructed and emission is a no-op. `enabled` is a separate
+/// toggle so operators can flip logging off without losing `brokers`/`topic`.
+#[derive(Clone, Debug, Deserialize)]
+pub struct PredictionsConfig {
+    /// Whether to actually emit predictions. Defaults to `true` when the
+    /// section is present.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Kafka bootstrap servers, e.g. `"localhost:9092"`.
+    pub brokers: String,
+    /// Kafka topic to publish `PredictionRecord`s to.
+    pub topic: String,
+    /// Fraction of predictions to emit, in `0.0..=1.0`. Defaults to `1.0`
+    /// (emit every prediction). Subsampling is deterministic (every Nth
+    /// request), not random.
+    #[serde(default = "default_sample_rate")]
+    pub sample_rate: f32,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_sample_rate() -> f32 {
+    1.0
+}
+
 /// Prometheus metrics HTTP exposition settings.
 #[derive(Clone, Debug, Deserialize)]
 pub struct MetricsConfig {
@@ -289,6 +319,9 @@ pub struct Config {
     /// Feature freshness enforcement. Absent disables enforcement (metrics still recorded).
     #[serde(default)]
     pub freshness: Option<FreshnessConfig>,
+    /// Closed-loop prediction logging. Absent disables it entirely.
+    #[serde(default)]
+    pub predictions: Option<PredictionsConfig>,
     /// Prometheus metrics settings.
     pub metrics: MetricsConfig,
     /// Input and output tensor specs expected by the model.
@@ -381,6 +414,27 @@ impl Config {
                 field: "freshness.max_feature_age_ms",
                 reason: "must not be 0; omit the [freshness] section to disable enforcement".into(),
             });
+        }
+
+        if let Some(predictions) = &self.predictions {
+            if predictions.brokers.is_empty() {
+                return Err(ConfigError::Invalid {
+                    field: "predictions.brokers",
+                    reason: "must not be empty".into(),
+                });
+            }
+            if predictions.topic.is_empty() {
+                return Err(ConfigError::Invalid {
+                    field: "predictions.topic",
+                    reason: "must not be empty".into(),
+                });
+            }
+            if !(0.0..=1.0).contains(&predictions.sample_rate) {
+                return Err(ConfigError::Invalid {
+                    field: "predictions.sample_rate",
+                    reason: "must be between 0.0 and 1.0".into(),
+                });
+            }
         }
 
         if self.model_schema.inputs.is_empty() {
@@ -488,6 +542,7 @@ mod tests {
                 health_check_interval_secs: None,
             },
             freshness: None,
+            predictions: None,
             metrics: MetricsConfig { port: 9090 },
             model_schema: ModelSchemaConfig {
                 inputs: vec![TensorSpec {
@@ -634,6 +689,59 @@ mod tests {
         "#;
         let cfg: FreshnessConfig = toml::from_str(toml).unwrap();
         assert_eq!(cfg.on_stale, FreshnessAction::Reject);
+    }
+
+    #[test]
+    fn predictions_absent_by_default() {
+        assert!(valid_config().predictions.is_none());
+    }
+
+    fn predictions(brokers: &str, topic: &str, sample_rate: f32) -> PredictionsConfig {
+        PredictionsConfig {
+            enabled: true,
+            brokers: brokers.to_owned(),
+            topic: topic.to_owned(),
+            sample_rate,
+        }
+    }
+
+    #[test]
+    fn accepts_valid_predictions_config() {
+        let mut cfg = valid_config();
+        cfg.predictions = Some(predictions("localhost:9092", "predictions", 1.0));
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn rejects_empty_predictions_brokers() {
+        let mut cfg = valid_config();
+        cfg.predictions = Some(predictions("", "predictions", 1.0));
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_empty_predictions_topic() {
+        let mut cfg = valid_config();
+        cfg.predictions = Some(predictions("localhost:9092", "", 1.0));
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_out_of_range_sample_rate() {
+        let mut cfg = valid_config();
+        cfg.predictions = Some(predictions("localhost:9092", "predictions", 1.5));
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn predictions_enabled_defaults_to_true() {
+        let toml = r#"
+            brokers = "localhost:9092"
+            topic = "predictions"
+        "#;
+        let cfg: PredictionsConfig = toml::from_str(toml).unwrap();
+        assert!(cfg.enabled);
+        assert_eq!(cfg.sample_rate, 1.0);
     }
 
     #[test]

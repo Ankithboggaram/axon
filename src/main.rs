@@ -9,11 +9,13 @@
 //! 5. Register Prometheus metrics and spawn the metrics HTTP listener
 //! 6. Ping the feature store (readiness is NOT set to `SERVING` until this passes)
 //! 7. Pre-populate the scratchpad and pipeline pools
-//! 8. Bind the gRPC listener; set liveness (`""`) and readiness
+//! 8. If `[predictions]` is configured and enabled, construct the
+//!    [`axon::predictions::PredictionSink`] (spawns its Kafka-draining task)
+//! 9. Bind the gRPC listener; set liveness (`""`) and readiness
 //!    (`axon.inference.v1.InferenceService`) to `SERVING`
-//! 9. Spawn a background task that pings the store every
-//!    `store.health_check_interval_secs` seconds; two consecutive failures flip
-//!    readiness to `NOT_SERVING`; recovery flips it back to `SERVING`
+//! 10. Spawn a background task that pings the store every
+//!     `store.health_check_interval_secs` seconds; two consecutive failures flip
+//!     readiness to `NOT_SERVING`; recovery flips it back to `SERVING`
 //!
 //! ## Liveness vs readiness
 //!
@@ -44,6 +46,7 @@ use axon::config::{BackendType, Config, RegistryType, StoreType};
 use axon::metrics::Metrics;
 use axon::pipeline::build::{build, build_scratchpad};
 use axon::pipeline::pool::PipelinePool;
+use axon::predictions::PredictionSink;
 use axon::proto::inference_service_server::InferenceServiceServer;
 use axon::registry::ModelRegistryClient;
 use axon::registry::mlflow::MlflowClient;
@@ -259,6 +262,20 @@ async fn main() -> anyhow::Result<()> {
                 health_interval,
             ));
 
+            let predictions = match &config.predictions {
+                Some(p) if p.enabled => {
+                    let sink = PredictionSink::new(p, Arc::clone(&metrics))
+                        .map_err(|e| anyhow::anyhow!("failed to set up prediction logging: {e}"))?;
+                    info!(
+                        brokers = p.brokers,
+                        topic = p.topic,
+                        "prediction logging enabled"
+                    );
+                    Some(Arc::new(sink))
+                }
+                _ => None,
+            };
+
             let inference_server = InferenceServer::new(
                 store,
                 pipeline_pool,
@@ -267,6 +284,9 @@ async fn main() -> anyhow::Result<()> {
                 config.grpc.stream_poll_interval_ms,
                 config.freshness.clone(),
                 expected_schema_version,
+                predictions,
+                model.name.clone(),
+                model.version.clone(),
             );
 
             let grpc_addr: SocketAddr = format!("{}:{}", config.grpc.host, config.grpc.port)

@@ -15,6 +15,7 @@ Part of the **Cortex** platform. Works alongside Dendrite (feature pipeline) and
 - A model registry with a model registered (built-in: MLflow)
 - A feature store populated with entity feature vectors (built-in: Redis)
 - Docker
+- A Kafka broker, only if you enable closed-loop prediction logging (`[predictions]` in config; see [Configuration](#configuration))
 
 ---
 
@@ -182,6 +183,15 @@ health_check_interval_secs = 10          # readiness probe polling interval
 max_feature_age_ms = 5000     # reject/flag features older than this
 on_stale            = "flag"  # "flag" (serve anyway, just warn) | "reject"
 
+# Optional. Omit this whole section (or set enabled = false) to disable
+# closed-loop prediction logging entirely — no Kafka producer is created and
+# emission is a single no-op check on the hot path.
+# [predictions]
+# enabled     = true
+# brokers     = "localhost:9092"
+# topic       = "predictions"
+# sample_rate = 1.0   # 0.0..=1.0; fraction of predictions emitted (deterministic, every Nth)
+
 [metrics]
 port = 9090
 
@@ -263,15 +273,17 @@ deadline_ms  = 50      # fails the stage if it exceeds this budget
 
 Prometheus metrics are scraped from `http://localhost:<metrics.port>/metrics` (default port `9090`).
 
-| Metric                               | Description                                     |
-| ------------------------------------ | ----------------------------------------------- |
-| `axon_requests_total{rpc, status}`   | Total requests by RPC and outcome               |
-| `axon_request_duration_seconds{rpc}` | End-to-end request latency                      |
-| `axon_store_fetch_duration_seconds`  | Feature store fetch latency                     |
-| `axon_served_feature_age_seconds`    | Age of served features (`now - event_time_ms`)  |
-| `axon_schema_version_rejects_total`  | Requests rejected for a schema_version mismatch |
-| `axon_stage_p99_ns{stage}`           | Per-stage p99 latency in nanoseconds            |
-| `axon_stage_p999_ns{stage}`          | Per-stage p999 latency in nanoseconds           |
+| Metric                               | Description                                       |
+| ------------------------------------ | ------------------------------------------------- |
+| `axon_requests_total{rpc, status}`   | Total requests by RPC and outcome                 |
+| `axon_request_duration_seconds{rpc}` | End-to-end request latency                        |
+| `axon_store_fetch_duration_seconds`  | Feature store fetch latency                       |
+| `axon_served_feature_age_seconds`    | Age of served features (`now - event_time_ms`)    |
+| `axon_schema_version_rejects_total`  | Requests rejected for a schema_version mismatch   |
+| `axon_predictions_emitted_total`     | PredictionRecords handed off for Kafka emission   |
+| `axon_predictions_dropped_total`     | PredictionRecords dropped (emission channel full) |
+| `axon_stage_p99_ns{stage}`           | Per-stage p99 latency in nanoseconds              |
+| `axon_stage_p999_ns{stage}`          | Per-stage p999 latency in nanoseconds             |
 
 Structured logs are written to stdout. Control verbosity with `RUST_LOG` and switch to JSON format with `AXON_LOG_JSON`:
 
@@ -380,6 +392,8 @@ cargo build --release
 ```
 
 Requires Rust 1.85 or later. See [rust-toolchain.toml](rust-toolchain.toml).
+
+Also requires `cmake`, a C/C++ toolchain, and OpenSSL/zlib development headers (`libssl-dev`, `zlib1g-dev` on Debian/Ubuntu) to build `rdkafka`'s vendored copy of librdkafka from source.
 
 ---
 

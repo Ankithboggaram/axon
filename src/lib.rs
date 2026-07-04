@@ -53,6 +53,7 @@ pub mod proto {
 }
 pub mod metrics;
 pub mod pipeline;
+pub mod predictions;
 pub mod registry;
 pub mod server;
 pub mod types;

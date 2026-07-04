@@ -20,6 +20,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use cortex_contract::PredictionRecord;
 use cortex_contract::store::{FetchResult, OnlineStoreReader, RecordHeader};
 use futures_util::StreamExt as _;
 use pipexec::pool::ScratchpadPool;
@@ -31,6 +32,7 @@ use crate::config::{FreshnessAction, FreshnessConfig};
 use crate::metrics::Metrics;
 use crate::pipeline::InferenceScratchpad;
 use crate::pipeline::pool::PipelinePool;
+use crate::predictions::PredictionSink;
 use crate::proto::{
     OutputTensor, PredictRequest, PredictResponse, PredictStreamRequest, PredictStreamResponse,
     inference_service_server::InferenceService,
@@ -53,6 +55,13 @@ pub struct InferenceServer {
     /// The model's trained `schema_version` to enforce served features
     /// against. `None` disables schema-version enforcement.
     expected_schema_version: Option<u32>,
+    /// Closed-loop prediction logging. `None` disables it entirely (a single
+    /// `is_none` check on the hot path, no channel or Kafka producer exists).
+    predictions: Option<Arc<PredictionSink>>,
+    /// Name of the currently served model, stamped into every `PredictionRecord`.
+    model_name: String,
+    /// Version of the currently served model, stamped into every `PredictionRecord`.
+    model_version: String,
 }
 
 impl InferenceServer {
@@ -66,6 +75,9 @@ impl InferenceServer {
         stream_poll_interval_ms: u64,
         freshness: Option<FreshnessConfig>,
         expected_schema_version: Option<u32>,
+        predictions: Option<Arc<PredictionSink>>,
+        model_name: String,
+        model_version: String,
     ) -> Self {
         Self {
             store,
@@ -75,6 +87,9 @@ impl InferenceServer {
             stream_poll_interval: Duration::from_millis(stream_poll_interval_ms),
             freshness,
             expected_schema_version,
+            predictions,
+            model_name,
+            model_version,
         }
     }
 
@@ -100,8 +115,11 @@ impl InferenceServer {
             .unwrap_or_default()
             .as_millis() as i64;
 
+        // Populated by a store fetch (Hit); stays default (zeroed) for inline
+        // features or a Miss, which is reflected as-is in a logged PredictionRecord.
+        let mut header = RecordHeader::default();
+
         if inline_features.is_empty() {
-            let mut header = RecordHeader::default();
             let fetch_start = Instant::now();
             let result = self
                 .store
@@ -163,11 +181,47 @@ impl InferenceServer {
                 .copy_from_slice(inline_features);
         }
 
+        // Snapshot the exact served input before the pipeline transforms it in
+        // place (impute/clip/normalize all mutate ctx.input). should_sample's
+        // atomic increment is the only cost paid when predictions are enabled
+        // but this particular request isn't sampled; the Vec clone only
+        // happens for requests that will actually be logged.
+        let sampled_prediction = self
+            .predictions
+            .as_ref()
+            .filter(|sink| sink.should_sample())
+            .map(|sink| {
+                (
+                    Arc::clone(sink),
+                    ctx.input.iter().copied().collect::<Vec<f32>>(),
+                )
+            });
+
         // Acquire a pipeline, run it against the scratchpad, return it to pool on drop.
         self.pipeline_pool.acquire().run(&mut *ctx).map_err(|e| {
             error!(entity_id, error = %e, "pipeline error");
             Status::internal(format!("pipeline error: {e}"))
         })?;
+
+        if let Some((sink, features)) = sampled_prediction {
+            let output = ctx
+                .outputs
+                .first()
+                .map(|out| out.data.iter().copied().collect())
+                .unwrap_or_default();
+
+            sink.emit(PredictionRecord {
+                entity_id: entity_id.to_owned(),
+                model_name: self.model_name.clone(),
+                model_version: self.model_version.clone(),
+                schema_version: header.schema_version,
+                event_time_ms: header.event_time_ms,
+                predict_time_ms: ctx.timestamp_ms,
+                features,
+                output,
+                request_id: String::new(),
+            });
+        }
 
         let outputs = ctx
             .outputs

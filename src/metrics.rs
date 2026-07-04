@@ -39,6 +39,12 @@ pub struct Metrics {
     /// served `FeatureRecord` and the model's trained schema.
     pub schema_version_rejects_total: Counter,
 
+    /// Total `PredictionRecord`s successfully handed off for async Kafka emission.
+    pub predictions_emitted_total: Counter,
+
+    /// Total `PredictionRecord`s dropped because the bounded emission channel was full.
+    pub predictions_dropped_total: Counter,
+
     // Per-stage latency and error rate snapshots, refreshed on each scrape.
     stage_p99_ns: GaugeVec,
     stage_p999_ns: GaugeVec,
@@ -113,6 +119,22 @@ impl Metrics {
             ),
             "axon_schema_version_rejects_total",
         )?;
+        let predictions_emitted_total = reg(
+            &registry,
+            Counter::new(
+                "axon_predictions_emitted_total",
+                "Total PredictionRecords successfully handed off for async Kafka emission.",
+            ),
+            "axon_predictions_emitted_total",
+        )?;
+        let predictions_dropped_total = reg(
+            &registry,
+            Counter::new(
+                "axon_predictions_dropped_total",
+                "Total PredictionRecords dropped because the bounded emission channel was full.",
+            ),
+            "axon_predictions_dropped_total",
+        )?;
         let stage_p99_ns = reg(
             &registry,
             GaugeVec::new(
@@ -157,6 +179,8 @@ impl Metrics {
             store_misses_total,
             served_feature_age_seconds,
             schema_version_rejects_total,
+            predictions_emitted_total,
+            predictions_dropped_total,
             stage_p99_ns,
             stage_p999_ns,
             stage_count_total,

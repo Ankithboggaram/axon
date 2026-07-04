@@ -59,6 +59,10 @@ futures-util = "0.3"
 # --- shared platform contract (feature payload, schema, keyspace, online store) ---
 cortex-contract = { version = "0.1.0", git = "https://github.com/Ankithboggaram/cortex-contract", tag = "v0.1.0", features = ["redis"] }
 
+# --- closed-loop prediction logging (async, fire-and-forget, off the hot path) ---
+# cmake-build statically vendors librdkafka: no system package required at build or runtime.
+rdkafka = { version = "0.36", features = ["cmake-build"] }
+
 # --- serialisation ---
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
