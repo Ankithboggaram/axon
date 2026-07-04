@@ -57,7 +57,7 @@ port = 9090
 # Optional: fallback schema_version to check served FeatureRecords against,
 # used only when the model registry has no schema_version tag. Needs its own
 # [model_schema] header, before the [[model_schema.inputs/outputs]] tables
-# below — a bare `model_schema.schema_version = 1` here would instead attach
+# below: a bare `model_schema.schema_version = 1` here would instead attach
 # to whichever [table] most recently preceded it (TOML's "open table" rule).
 # [model_schema]
 # schema_version = 1
