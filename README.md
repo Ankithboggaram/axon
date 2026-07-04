@@ -148,6 +148,15 @@ on_stale            = "flag"  # "flag" (serve anyway, just warn) | "reject"
 [metrics]
 port = 9090
 
+# Optional: cross-checks the model's input width against a shared
+# cortex-contract feature_schema.toml at startup, failing fast if the two
+# files disagree. If present, its `version` also becomes the fallback source
+# for schema-version enforcement (ahead of a bare config value), ahead of the
+# hard-coded fallback below. Only applies to a model whose input is a flat,
+# named-feature vector.
+# [feature_schema]
+# path = "feature_schema.toml"
+
 # Tensor names, types, and shapes must match the model exactly.
 [[model_schema.inputs]]
 name  = "features"

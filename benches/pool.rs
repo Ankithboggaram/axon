@@ -80,6 +80,7 @@ fn mnist_config() -> Config {
             }],
             schema_version: None,
         },
+        feature_schema: None,
         pipeline: PipelineConfig {
             stages: vec![StageConfig::Infer {
                 observability: no_obs(),

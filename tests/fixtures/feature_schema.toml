@@ -1,0 +1,41 @@
+version = 1
+
+[[feature]]
+name  = "f0"
+dtype = "f32"
+
+[[feature]]
+name  = "f1"
+dtype = "f32"
+
+[[feature]]
+name  = "f2"
+dtype = "f32"
+
+[[feature]]
+name  = "f3"
+dtype = "f32"
+
+[[feature]]
+name  = "f4"
+dtype = "f32"
+
+[[feature]]
+name  = "f5"
+dtype = "f32"
+
+[[feature]]
+name  = "f6"
+dtype = "f32"
+
+[[feature]]
+name  = "f7"
+dtype = "f32"
+
+[[feature]]
+name  = "f8"
+dtype = "f32"
+
+[[feature]]
+name  = "f9"
+dtype = "f32"

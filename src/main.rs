@@ -158,15 +158,26 @@ async fn main() -> anyhow::Result<()> {
                 "model artifact ready"
             );
 
-            // The registry's schema_version tag wins; the config value is only
-            // a fallback for registries or models that don't stamp one.
-            let expected_schema_version =
-                model.schema_version.or(config.model_schema.schema_version);
+            // Precedence: the registry's schema_version tag wins (it reflects
+            // what the model was actually trained against). Next, the shared
+            // cortex-contract feature schema's own version, if this
+            // deployment cross-checks against one (Config::load_feature_schema)
+            // - this is what makes cortex-contract's schema module a real,
+            // consumed source of truth rather than just a parallel config
+            // field. The plain config fallback is the last resort, for
+            // registries or models that don't stamp a tag at all.
+            let feature_schema = config
+                .load_feature_schema()
+                .map_err(|e| anyhow::anyhow!("failed to load feature schema: {e}"))?;
+            let expected_schema_version = model
+                .schema_version
+                .or(feature_schema.as_ref().map(|s| s.version))
+                .or(config.model_schema.schema_version);
             match expected_schema_version {
                 Some(v) => info!(schema_version = v, "schema-version enforcement enabled"),
                 None => info!(
-                    "no schema_version available from the registry or config; \
-                     schema-version enforcement disabled"
+                    "no schema_version available from the registry, feature schema, \
+                     or config; schema-version enforcement disabled"
                 ),
             }
 

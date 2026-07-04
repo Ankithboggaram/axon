@@ -226,6 +226,26 @@ pub struct ModelSchemaConfig {
     pub schema_version: Option<u32>,
 }
 
+/// Optional startup cross-check against a shared `cortex-contract`
+/// `feature_schema.toml`.
+///
+/// If present, [`Config::validate`] loads the file and asserts the model's
+/// flattened input width matches the schema's `width()`, catching a
+/// misconfiguration (e.g. `feature_schema.toml` updated without updating
+/// `model_schema.inputs`) at startup instead of at request time.
+///
+/// Absent disables the cross-check entirely. It only applies to deployments
+/// whose model takes a flat, named-feature vector; a non-tabular model (e.g.
+/// an image tensor) simply omits this section, since `FeatureSchema`'s
+/// abstraction (an ordered list of named scalar features) doesn't describe
+/// that kind of input shape.
+#[derive(Clone, Debug, Deserialize)]
+pub struct FeatureSchemaConfig {
+    /// Path to the canonical `cortex_contract::schema::FeatureSchema` TOML
+    /// file this deployment was built against.
+    pub path: String,
+}
+
 /// Per-stage observability options.
 #[derive(Clone, Debug, Deserialize)]
 pub struct StageObservability {
@@ -326,6 +346,10 @@ pub struct Config {
     pub metrics: MetricsConfig,
     /// Input and output tensor specs expected by the model.
     pub model_schema: ModelSchemaConfig,
+    /// Optional startup cross-check against a shared cortex-contract feature
+    /// schema. Absent disables the cross-check entirely.
+    #[serde(default)]
+    pub feature_schema: Option<FeatureSchemaConfig>,
     /// Pipeline stage configuration.
     pub pipeline: PipelineConfig,
 }
@@ -461,6 +485,30 @@ impl Config {
             });
         }
 
+        if let Some(schema) = self.load_feature_schema()? {
+            // Total tensor element count, not "all dims but the first": the
+            // store's fetch writes into ctx.input's full flattened slice
+            // (batch dimension included), so that's the number that must
+            // equal the shared schema's width.
+            let model_width: usize = self.model_schema.inputs[0]
+                .shape
+                .iter()
+                .map(|&d| d as usize)
+                .product();
+
+            if model_width != schema.width() {
+                return Err(ConfigError::Invalid {
+                    field: "feature_schema",
+                    reason: format!(
+                        "model input width {model_width} does not match \
+                         feature_schema.toml width {} (schema version {})",
+                        schema.width(),
+                        schema.version
+                    ),
+                });
+            }
+        }
+
         for stage in &self.pipeline.stages {
             if let StageConfig::Normalize { std, .. } = stage
                 && *std == 0.0
@@ -499,6 +547,32 @@ impl Config {
         }
 
         Ok(())
+    }
+
+    /// Loads the shared `cortex-contract` feature schema this config points
+    /// at, if `[feature_schema]` is configured.
+    ///
+    /// Returns `None` if the section is absent — the cross-check is opt-in,
+    /// not required. Called both by [`Config::validate`] (the width
+    /// cross-check) and by `main.rs` (to source `expected_schema_version`
+    /// from the shared schema's own `version` field, ahead of the plain
+    /// config fallback).
+    pub fn load_feature_schema(
+        &self,
+    ) -> Result<Option<cortex_contract::schema::FeatureSchema>, ConfigError> {
+        let Some(fs_config) = &self.feature_schema else {
+            return Ok(None);
+        };
+
+        let schema =
+            cortex_contract::schema::FeatureSchema::from_toml(&fs_config.path).map_err(|e| {
+                ConfigError::Invalid {
+                    field: "feature_schema.path",
+                    reason: format!("failed to load feature schema: {e}"),
+                }
+            })?;
+
+        Ok(Some(schema))
     }
 }
 
@@ -557,6 +631,7 @@ mod tests {
                 }],
                 schema_version: None,
             },
+            feature_schema: None,
             pipeline: PipelineConfig {
                 stages: vec![StageConfig::Infer {
                     observability: obs(),
@@ -907,5 +982,53 @@ device = "tensorrt""#;
         let toml = r#"type = "onnx_runtime"
 device = "vulkan""#;
         assert!(toml::from_str::<BackendConfig>(toml).is_err());
+    }
+
+    // feature_schema: valid_config()'s model input shape is [1, 10] -> a
+    // flattened width of 10, matching tests/fixtures/feature_schema.toml's
+    // 10 features.
+    fn cfg_with_feature_schema(path: &str) -> Config {
+        let mut cfg = valid_config();
+        cfg.feature_schema = Some(FeatureSchemaConfig {
+            path: path.to_owned(),
+        });
+        cfg
+    }
+
+    #[test]
+    fn feature_schema_absent_by_default() {
+        assert!(valid_config().feature_schema.is_none());
+    }
+
+    #[test]
+    fn load_feature_schema_returns_none_when_absent() {
+        assert!(valid_config().load_feature_schema().unwrap().is_none());
+    }
+
+    #[test]
+    fn load_feature_schema_returns_schema_when_present() {
+        let cfg = cfg_with_feature_schema("tests/fixtures/feature_schema.toml");
+        let schema = cfg.load_feature_schema().unwrap().unwrap();
+        assert_eq!(schema.version, 1);
+        assert_eq!(schema.width(), 10);
+    }
+
+    #[test]
+    fn feature_schema_cross_check_passes_when_widths_match() {
+        let cfg = cfg_with_feature_schema("tests/fixtures/feature_schema.toml");
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn feature_schema_cross_check_fails_when_widths_differ() {
+        let mut cfg = cfg_with_feature_schema("tests/fixtures/feature_schema.toml");
+        cfg.model_schema.inputs[0].shape = vec![1, 5]; // width 5 != fixture's width 10
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
+    fn feature_schema_missing_file_produces_an_error() {
+        let cfg = cfg_with_feature_schema("tests/fixtures/does_not_exist.toml");
+        assert!(cfg.validate().is_err());
     }
 }
