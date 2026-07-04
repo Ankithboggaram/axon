@@ -20,6 +20,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use cortex_contract::store::{FetchResult, OnlineStoreReader, RecordHeader};
 use futures_util::StreamExt as _;
 use pipexec::pool::ScratchpadPool;
 use tokio_stream::Stream;
@@ -33,7 +34,6 @@ use crate::proto::{
     OutputTensor, PredictRequest, PredictResponse, PredictStreamRequest, PredictStreamResponse,
     inference_service_server::InferenceService,
 };
-use crate::store::{FeatureStore, FetchResult};
 
 /// The gRPC service implementation.
 ///
@@ -41,7 +41,7 @@ use crate::store::{FeatureStore, FetchResult};
 /// per connection without duplicating the underlying state.
 #[derive(Clone)]
 pub struct InferenceServer {
-    store: Arc<dyn FeatureStore>,
+    store: Arc<dyn OnlineStoreReader>,
     pipeline_pool: Arc<PipelinePool>,
     scratchpad_pool: Arc<ScratchpadPool<InferenceScratchpad>>,
     metrics: Arc<Metrics>,
@@ -51,7 +51,7 @@ pub struct InferenceServer {
 impl InferenceServer {
     /// Creates a new inference server wiring together all subsystems.
     pub fn new(
-        store: Arc<dyn FeatureStore>,
+        store: Arc<dyn OnlineStoreReader>,
         pipeline_pool: Arc<PipelinePool>,
         scratchpad_pool: Arc<ScratchpadPool<InferenceScratchpad>>,
         metrics: Arc<Metrics>,
@@ -89,10 +89,17 @@ impl InferenceServer {
             .as_millis() as i64;
 
         if inline_features.is_empty() {
+            // The header (schema_version, event_time_ms) is unused until Phase B's
+            // freshness/schema-version checks are wired in; fetch always fills it.
+            let mut header = RecordHeader::default();
             let fetch_start = Instant::now();
             let result = self
                 .store
-                .fetch_features(entity_id, &mut ctx.input)
+                .fetch(
+                    entity_id,
+                    &mut header,
+                    ctx.input.as_slice_mut().expect("contiguous array"),
+                )
                 .await
                 .map_err(|e| {
                     error!(entity_id, error = %e, "feature store error");
@@ -208,7 +215,7 @@ impl InferenceService for InferenceServer {
             let span = info_span!("predict_stream", entity_id = %entity_id);
             let _enter = span.enter();
 
-            let mut updates = server.store.update_stream(&entity_id, server.stream_poll_interval).await;
+            let mut updates = server.store.updates(&entity_id, server.stream_poll_interval).await;
             while let Some(()) = updates.next().await {
                 let start = Instant::now();
                 let result = server.run_inference(&entity_id, &[]).await;

@@ -48,8 +48,8 @@ use axon::proto::inference_service_server::InferenceServiceServer;
 use axon::registry::ModelRegistryClient;
 use axon::registry::mlflow::MlflowClient;
 use axon::server::InferenceServer;
-use axon::store::FeatureStore;
-use axon::store::redis::RedisStore;
+use cortex_contract::store::OnlineStoreReader;
+use cortex_contract::store::redis::RedisOnlineStore;
 use pipexec::pool::ScratchpadPool;
 
 #[derive(Parser)]
@@ -128,11 +128,14 @@ async fn main() -> anyhow::Result<()> {
                 _ => anyhow::bail!("unsupported registry type"),
             };
 
-            let store: Arc<dyn FeatureStore> = match config.store.store_type {
+            let store: Arc<dyn OnlineStoreReader> = match config.store.store_type {
                 StoreType::Redis => {
-                    let url = format!("redis://{}:{}", config.store.host, config.store.port);
-                    let key_prefix = config.store.key_prefix.as_deref().unwrap_or("features");
-                    Arc::new(RedisStore::new(&url, key_prefix)?)
+                    let key_prefix = config
+                        .store
+                        .key_prefix
+                        .as_deref()
+                        .unwrap_or(cortex_contract::keys::DEFAULT_KEY_PREFIX);
+                    Arc::new(RedisOnlineStore::new(&config.store.url, key_prefix)?)
                 }
                 _ => anyhow::bail!("unsupported store type"),
             };
@@ -324,7 +327,7 @@ fn init_tracing() {
 }
 
 async fn store_health_check(
-    store: Arc<dyn FeatureStore>,
+    store: Arc<dyn OnlineStoreReader>,
     mut health_reporter: tonic_health::server::HealthReporter,
     interval: Duration,
 ) {

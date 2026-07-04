@@ -6,9 +6,11 @@
 //! Each enum corresponds to one subsystem:
 //! - [`ConfigError`]   - config file loading and validation
 //! - [`BackendError`]  - inference backend (ONNX Runtime, Triton, ...)
-//! - [`StoreError`]    - feature store (Redis, ...)
 //! - [`RegistryError`] - model registry (MLflow, ...)
 //! - [`ServeError`]    - server startup and metrics initialisation
+//!
+//! The online feature store's errors are `cortex_contract::StoreError`; Axon
+//! no longer defines its own, since it no longer owns the store.
 
 use thiserror::Error;
 
@@ -65,44 +67,6 @@ pub enum BackendError {
     /// The inference run itself failed.
     #[error("inference failed: {0}")]
     InferenceFailed(String),
-}
-
-/// Errors from a [`FeatureStore`](crate::store::FeatureStore).
-#[non_exhaustive]
-#[derive(Debug, Error)]
-pub enum StoreError {
-    /// A connection or pool could not be established.
-    #[error("failed to connect to feature store: {0}")]
-    Connection(String),
-
-    /// A feature fetch command failed.
-    #[error("feature fetch failed for entity '{entity_id}': {reason}")]
-    Fetch {
-        /// Entity for which the fetch failed.
-        entity_id: String,
-        /// Underlying error from the store.
-        reason: String,
-    },
-
-    /// The raw bytes returned by the store could not be deserialised.
-    #[error("failed to deserialise features for entity '{entity_id}': {reason}")]
-    Deserialize {
-        /// Entity whose features could not be deserialised.
-        entity_id: String,
-        /// Deserialisation error detail.
-        reason: String,
-    },
-
-    /// The deserialised feature vector has the wrong shape for the pipeline.
-    #[error("feature shape mismatch for entity '{entity_id}': expected {expected:?}, got {got:?}")]
-    ShapeMismatch {
-        /// Entity whose feature vector had the wrong shape.
-        entity_id: String,
-        /// Shape the pipeline expects for the input buffer.
-        expected: Vec<usize>,
-        /// Shape of the vector returned by the store.
-        got: Vec<usize>,
-    },
 }
 
 /// Errors from a [`ModelRegistryClient`](crate::registry::ModelRegistryClient).
@@ -175,17 +139,6 @@ mod tests {
         let msg = format!("{e}");
         assert!(msg.contains("32"));
         assert!(msg.contains("16"));
-    }
-
-    #[test]
-    fn store_fetch_includes_entity_id() {
-        let e = StoreError::Fetch {
-            entity_id: "user_123".into(),
-            reason: "connection reset".into(),
-        };
-        let msg = format!("{e}");
-        assert!(msg.contains("user_123"));
-        assert!(msg.contains("connection reset"));
     }
 
     #[test]

@@ -31,8 +31,7 @@ model_version = "latest"   # a version number or "latest"
 [store]
 # Only "redis" is supported right now. ("feast" support planned)
 type = "redis"
-host = "localhost"
-port = 6379
+url = "redis://localhost:6379"
 
 [metrics]
 port = 9090

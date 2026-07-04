@@ -16,9 +16,9 @@
 //!    between request receipt and response dispatch.
 //!
 //! 3. **Extensibility via traits, not config flags.** [`backend::Backend`],
-//!    [`store::FeatureStore`], and [`registry::ModelRegistryClient`] are traits.
-//!    Adding a new backend (e.g. Triton) or a new feature store (e.g. Feast) means
-//!    writing one trait `impl` and adding a config enum variant; the pipeline,
+//!    `cortex_contract::store::OnlineStoreReader`, and [`registry::ModelRegistryClient`]
+//!    are traits. Adding a new backend (e.g. Triton) or a new feature store backend
+//!    means writing one trait `impl` and adding a config enum variant; the pipeline,
 //!    server, and pooling logic require no changes.
 //!
 //! # Architecture
@@ -55,5 +55,4 @@ pub mod metrics;
 pub mod pipeline;
 pub mod registry;
 pub mod server;
-pub mod store;
 pub mod types;

@@ -6,14 +6,22 @@ and seeds Redis with synthetic feature vectors.
 Run this once before `axon init` to set up a working demo environment.
 
 Requirements:
-    pip install numpy scikit-learn onnx mlflow redis msgpack-python
+    pip install numpy scikit-learn onnx mlflow redis protobuf
+    protoc on PATH
+    a checkout of cortex-contract (default: ../cortex-contract relative to this repo)
 """
 
 import argparse
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+from types import ModuleType
 
 import mlflow
 import mlflow.onnx
-import msgpack
 import numpy as np
 import onnx
 import redis
@@ -25,6 +33,38 @@ from sklearn.linear_model import LogisticRegression
 
 N_FEATURES = 30
 N_ENTITIES = 50
+
+
+def load_feature_record_module(contract_dir: Path) -> ModuleType:
+    """Compiles cortex-contract's feature_record.proto to a Python module.
+
+    cortex-contract isn't published to PyPI, so (matching the contract repo's
+    own scripts/check_roundtrip.py) this generates the Python type on the fly
+    from the same .proto Rust compiles via prost — one wire definition, no
+    hand-written mirror to drift out of sync.
+    """
+    if shutil.which("protoc") is None:
+        sys.exit("error: 'protoc' not found on PATH (required to read cortex-contract's proto/)")
+
+    proto_dir = contract_dir / "proto"
+    proto_file = proto_dir / "cortex" / "contract" / "v1" / "feature_record.proto"
+    if not proto_file.exists():
+        sys.exit(
+            f"error: {proto_file} not found\n"
+            f"  hint: pass --contract-dir pointing at a cortex-contract checkout"
+        )
+
+    tmp_dir = tempfile.mkdtemp(prefix="axon-seed-demo-")
+    subprocess.run(
+        ["protoc", f"--python_out={tmp_dir}", "-I", str(proto_dir), str(proto_file)],
+        check=True,
+    )
+    # protoc mirrors the proto's package path into the output dir, so the
+    # generated module lands under <tmp_dir>/cortex/contract/v1/.
+    sys.path.insert(0, str(Path(tmp_dir) / "cortex" / "contract" / "v1"))
+    import feature_record_pb2  # noqa: PLC0415
+
+    return feature_record_pb2
 
 
 def build_onnx_model(coef: np.ndarray, intercept: np.ndarray) -> onnx.ModelProto:
@@ -70,7 +110,15 @@ def main() -> None:
     parser.add_argument("--redis-port", default=6379, type=int)
     parser.add_argument("--key-prefix", default="features")
     parser.add_argument("--model-name", default="fraud_demo")
+    parser.add_argument(
+        "--contract-dir",
+        default=Path(__file__).resolve().parent.parent.parent / "cortex-contract",
+        type=Path,
+        help="path to a cortex-contract checkout (default: ../cortex-contract)",
+    )
     args = parser.parse_args()
+
+    fr_pb2 = load_feature_record_module(args.contract_dir)
 
     # Synthetic tabular data: 3% fraud rate, similar to real transaction data.
     X, y = make_classification(
@@ -123,14 +171,20 @@ def main() -> None:
         f"Registered '{args.model_name}' v{version.version} to MLflow at {args.mlflow_uri}"
     )
 
-    # Seed Redis with MessagePack-encoded float32 vectors under features:{entity_id}.
+    # Seed Redis with protobuf(FeatureRecord)-encoded vectors under features:{entity_id},
+    # the same wire format cortex-contract's Rust codec decodes on Axon's read path.
+    # schema_version is a demo placeholder; Phase B is what makes Axon check it against
+    # the model's trained version.
     r = redis.Redis(host=args.redis_host, port=args.redis_port, decode_responses=False)
+    now_ms = int(time.time() * 1000)
     for i in range(N_ENTITIES):
         key = f"{args.key_prefix}:entity_{i:04d}"
-        features = X[i % len(X)].tolist()
-        # use_single_float=True encodes as float32; axon deserializes Vec<f32>
-        # and rmp_serde does not coerce float64 → float32 automatically.
-        r.set(key, msgpack.packb(features, use_single_float=True))
+        record = fr_pb2.FeatureRecord(
+            schema_version=1,
+            event_time_ms=now_ms,
+            features=X[i % len(X)].tolist(),
+        )
+        r.set(key, record.SerializeToString())
     print(
         f"Seeded {N_ENTITIES} entities in Redis at {args.redis_host}:{args.redis_port}"
     )

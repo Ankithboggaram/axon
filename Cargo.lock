@@ -142,7 +142,7 @@ dependencies = [
  "async-stream",
  "async-trait",
  "clap",
- "deadpool-redis",
+ "cortex-contract",
  "divan",
  "futures-util",
  "image",
@@ -154,7 +154,6 @@ dependencies = [
  "proptest",
  "prost",
  "reqwest",
- "rmp-serde",
  "serde",
  "serde_json",
  "serde_yaml_ng",
@@ -388,6 +387,23 @@ name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
+
+[[package]]
+name = "cortex-contract"
+version = "0.1.0"
+source = "git+https://github.com/Ankithboggaram/cortex-contract?tag=v0.1.0#ee5175ca866c1921fa9b7c845ae6518e8b8c6376"
+dependencies = [
+ "async-trait",
+ "deadpool-redis",
+ "futures-util",
+ "prost",
+ "prost-build",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+ "toml",
+]
 
 [[package]]
 name = "crc32fast"
@@ -1828,25 +1844,6 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "rmp"
-version = "0.8.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ba8be72d372b2c9b35542551678538b562e7cf86c3315773cae48dfbfe7790c"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
-name = "rmp-serde"
-version = "1.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72f81bee8c8ef9b577d1681a70ebbc962c232461e397b22c208c43c04b67a155"
-dependencies = [
- "rmp",
- "serde",
 ]
 
 [[package]]

@@ -38,10 +38,11 @@ mlflow server --host 0.0.0.0 --port 5000
 
 **Step 1: Register a model and seed the feature store**
 
-Axon needs a model registered in MLflow and feature vectors in Redis before it can serve anything. The included demo script trains a logistic regression fraud-detection model, exports it to ONNX, registers it, and writes 50 synthetic feature vectors to Redis:
+Axon needs a model registered in MLflow and feature vectors in Redis before it can serve anything. The included demo script trains a logistic regression fraud-detection model, exports it to ONNX, registers it, and writes 50 synthetic feature vectors to Redis, encoded as `cortex-contract`'s `FeatureRecord` protobuf message (the same payload Axon reads on its serving path). It needs a sibling checkout of [`cortex-contract`](https://github.com/Ankithboggaram/cortex-contract) to compile that message's Python bindings, plus `protoc` on your `PATH`:
 
 ```bash
-pip install numpy scikit-learn onnx mlflow redis msgpack-python
+git clone https://github.com/Ankithboggaram/cortex-contract ../cortex-contract
+pip install numpy scikit-learn onnx mlflow redis protobuf
 python scripts/seed_demo.py
 ```
 
@@ -171,8 +172,7 @@ model_version = "1"            # version number or "latest"
 
 [store]
 type                       = "redis"
-host                       = "localhost"
-port                       = 6379
+url                        = "redis://localhost:6379"
 key_prefix                 = "features"  # keys stored as {key_prefix}:{entity_id}
 health_check_interval_secs = 10          # readiness probe polling interval
 
@@ -340,7 +340,7 @@ The same pattern applies for:
 
 | Trait                 | Implement to add                                   |
 | --------------------- | -------------------------------------------------- |
-| `FeatureStore`        | A new feature store (e.g. Feast, Cassandra)        |
+| `OnlineStoreReader`   | A new feature store backend (e.g. Feast, Cassandra), added to `cortex-contract` |
 | `ModelRegistryClient` | A new model registry (e.g. Vertex AI, custom HTTP) |
 
 ---
