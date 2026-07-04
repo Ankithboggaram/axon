@@ -12,3 +12,7 @@
 # ONNX model files — test fixtures are committed explicitly; production models must not be
 *.onnx
 !tests/fixtures/*.onnx
+
+# Local planning/design docs — not for the public repo
+/PRD.md
+/MIGRATION.md
